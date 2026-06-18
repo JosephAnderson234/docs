@@ -106,7 +106,7 @@ Objeto `NotificationResponseDto` (ver [esquema](#esquema-notificationresponsedto
 
 ## POST /notifications/follow-ups — Crear seguimiento
 
-Programa un **seguimiento** compuesto por **1 a 3 instancias escalonadas**. Cada instancia agrupa dos correos: uno **interno** al encargado de la actividad y uno **externo** al contacto del lead. Todas las instancias se envían al **mismo destinatario externo** (`correoCliente`).
+Programa un **seguimiento** con una sola instancia: primero envía un correo **interno** al encargado de la actividad y luego uno **externo** al contacto del lead.
 
 ### Body parameters
 
@@ -115,20 +115,20 @@ Programa un **seguimiento** compuesto por **1 a 3 instancias escalonadas**. Cada
 </ParamField>
 
 <ParamField body="correoCliente" type="string (email)" required>
-  Destinatario del cliente para **todas** las instancias. Debe ser uno de los correos del contacto del lead.
+  Destinatario del cliente para el correo externo. Debe ser uno de los correos del contacto del lead.
 </ParamField>
 
-<ParamField body="instancias" type="array (1–3 elementos)" required>
-  Instancias escalonadas del seguimiento. Cada elemento es un objeto `{ internal, external }` con los siguientes campos:
+<ParamField body="instancias" type="array (exactamente 1 elemento)" required>
+  Debe contener **exactamente 1 elemento**. Cada elemento es un objeto `{ internal, external }` con los siguientes campos:
 
   | Campo | Tipo | Obligatorio | Notas |
   | --- | --- | --- | --- |
   | `internal.fechaEnvio` | string (ISO 8601) | sí | Aplica horario laboral `[09:00–18:00)` |
-  | `internal.idTemplate` | integer ≥ 1 \| null | **no** | Si se omite, asunto y cuerpo van escritos a mano |
+  | `internal.idTemplate` | integer ≥ 1 \| null | **no** | Default `null`. Si se omite o es `null`, asunto y cuerpo van escritos a mano |
   | `internal.asunto` | string (1–255) | sí |  |
   | `internal.cuerpo` | string (HTML) | sí |  |
   | `external.fechaEnvio` | string (ISO 8601) | sí | **Debe ser posterior a `internal.fechaEnvio`** |
-  | `external.idTemplate` | integer ≥ 1 \| null | **no** | Si se omite, asunto y cuerpo van escritos a mano |
+  | `external.idTemplate` | integer ≥ 1 \| null | **no** | Default `null`. Si se omite o es `null`, asunto y cuerpo van escritos a mano |
   | `external.asunto` | string (1–255) | sí |  |
   | `external.cuerpo` | string (HTML) | sí |  |
 </ParamField>
@@ -136,10 +136,9 @@ Programa un **seguimiento** compuesto por **1 a 3 instancias escalonadas**. Cada
 <Note>
   **Reglas de validación**
 
-  - Entre **1 y 3 instancias**.
-  - En cada instancia, el correo **interno** (al responsable) debe ser **anterior** al **externo** (al cliente).
-  - **Todas** las fechas (internas y externas) deben caer **antes de la fecha de fin** de la actividad activa del lead.
-  - Las instancias van **en orden** y **no se solapan**: el externo de la instancia _i_ debe ser **anterior** al interno de la instancia _i\+1_ (`external[i].fechaEnvio < internal[i+1].fechaEnvio`).
+  - `instancias` debe tener **exactamente 1 elemento**.
+  - El correo **interno** (al responsable) debe ser **anterior** al **externo** (al cliente).
+  - **Todas** las fechas (interna y externa) deben ser futuras y caer **antes de la fecha de fin** de la actividad activa del lead.
   - Las fechas fuera del horario laboral `[09:00–18:00)` se **reprograman a las 09:00** del mismo día.
 </Note>
 
@@ -154,28 +153,14 @@ Programa un **seguimiento** compuesto por **1 a 3 instancias escalonadas**. Cada
       "internal": {
         "fechaEnvio": "2026-06-20T14:00:00.000Z",
         "idTemplate": 5,
-        "asunto": "Revisión interna de seguimiento #1",
+        "asunto": "Revisión interna de seguimiento",
         "cuerpo": "<p>Revisa la propuesta enviada al lead.</p>"
       },
       "external": {
-        "fechaEnvio": "2026-06-21T16:00:00.000Z",
+        "fechaEnvio": "2026-06-20T16:00:00.000Z",
         "idTemplate": null,
         "asunto": "Seguimiento a su propuesta",
         "cuerpo": "<p>Estimada María, damos seguimiento a la propuesta enviada.</p>"
-      }
-    },
-    {
-      "internal": {
-        "fechaEnvio": "2026-06-24T10:00:00.000Z",
-        "idTemplate": null,
-        "asunto": "Revisión interna de seguimiento #2",
-        "cuerpo": "<p>Segundo recordatorio interno.</p>"
-      },
-      "external": {
-        "fechaEnvio": "2026-06-24T15:00:00.000Z",
-        "idTemplate": 8,
-        "asunto": "¿Pudo revisar nuestra propuesta?",
-        "cuerpo": "<p>Estimada María, quería confirmar si tuvo oportunidad de revisar la propuesta.</p>"
       }
     }
   ]
@@ -199,21 +184,11 @@ Programa un **seguimiento** compuesto por **1 a 3 instancias escalonadas**. Cada
     {
       "id": 501,
       "orden": 1,
-      "asuntoInterno": "Revisión interna de seguimiento #1",
+      "asuntoInterno": "Revisión interna de seguimiento",
       "fechaEnvioInterno": "2026-06-20T14:00:00.000Z",
       "enviadoInterno": false,
       "asuntoExterno": "Seguimiento a su propuesta",
-      "fechaEnvioExterno": "2026-06-21T16:00:00.000Z",
-      "enviadoExterno": false
-    },
-    {
-      "id": 502,
-      "orden": 2,
-      "asuntoInterno": "Revisión interna de seguimiento #2",
-      "fechaEnvioInterno": "2026-06-24T10:00:00.000Z",
-      "enviadoInterno": false,
-      "asuntoExterno": "¿Pudo revisar nuestra propuesta?",
-      "fechaEnvioExterno": "2026-06-24T15:00:00.000Z",
+      "fechaEnvioExterno": "2026-06-20T16:00:00.000Z",
       "enviadoExterno": false
     }
   ],
@@ -226,7 +201,118 @@ Programa un **seguimiento** compuesto por **1 a 3 instancias escalonadas**. Cada
 - **`409 Conflict`** si el lead **ya tiene un seguimiento programado**.
 - **`404 NotFound`** si el lead **no tiene actividad activa**.
 - **`400 Validation`** si `correoCliente` **no pertenece** a los contactos del lead.
-- **`400 Validation`** si las fechas **no cumplen el orden/rango**: instancias fuera de `1–3`, interno ≥ externo en una instancia, externo\[i\] ≥ interno\[i\+1\], o cualquier fecha en/después de la fecha de fin de la actividad.
+- **`400 Validation`** si las fechas **no cumplen el rango/orden**: `instancias` con cantidad distinta de 1, `external.fechaEnvio` ≤ `internal.fechaEnvio`, o cualquier fecha en/después de la fecha de fin de la actividad.
+
+Ver [tabla de errores](#errores) para el envelope completo.
+
+---
+
+## PATCH /notifications/follow-ups/:id — Editar seguimiento
+
+Edita la única instancia de un seguimiento. Solo se permite cuando la notificación está **PROGRAMADA** y sus dos correos (**interno** y **externo**) todavía no han sido enviados.
+
+Al editar, el sistema reemplaza asunto/cuerpo/plantilla/fecha de ambos correos, cancela los envíos programados anteriores y reprograma con las nuevas fechas.
+
+<Note>
+  A diferencia de `POST /notifications/follow-ups`, este endpoint **no** usa el array `instancias`. El body usa directamente los objetos planos `internal` y `external`.
+</Note>
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  ID de la notificación de seguimiento.
+</ParamField>
+
+### Body parameters
+
+<ParamField body="correoCliente" type="string (email)">
+  Opcional. Si se omite, se conserva el correo actual. Si se envía, debe pertenecer al contacto del lead.
+</ParamField>
+
+<ParamField body="internal" type="object" required>
+  Correo interno al responsable.
+</ParamField>
+
+<ParamField body="external" type="object" required>
+  Correo externo al cliente. Debe programarse después de `internal`.
+</ParamField>
+
+Campos de `internal` y `external`:
+
+| Campo | Tipo | Obligatorio | Notas |
+| --- | --- | --- | --- |
+| `fechaEnvio` | string (ISO 8601) | sí | Ejemplo: `2026-06-20T14:00:00.000Z` |
+| `idTemplate` | integer ≥ 1 \| null | no | Default `null`. Si se omite o es `null`, se usa contenido manual |
+| `asunto` | string (1–255) | sí |  |
+| `cuerpo` | string (HTML) | sí |  |
+
+<Note>
+  **Reglas de validación**
+
+  - Solo editable mientras el seguimiento esté en estado `PROGRAMADA`.
+  - Ninguno de los dos correos de la instancia debe haber sido enviado.
+  - `external.fechaEnvio` debe ser posterior a `internal.fechaEnvio`.
+  - Ambas fechas deben ser futuras y anteriores a la fecha de fin de la actividad activa.
+  - Si una fecha cae fuera de `[09:00–18:00)`, se reprograma a las `09:00` del mismo día.
+</Note>
+
+### Ejemplo request
+
+```json
+{
+  "correoCliente": "cliente@empresa.com",
+  "internal": {
+    "fechaEnvio": "2026-06-20T14:00:00.000Z",
+    "idTemplate": 5,
+    "asunto": "Recordatorio interno actualizado",
+    "cuerpo": "<p>Revisar la actividad del lead</p>"
+  },
+  "external": {
+    "fechaEnvio": "2026-06-20T15:00:00.000Z",
+    "idTemplate": 6,
+    "asunto": "Seguimiento de su solicitud",
+    "cuerpo": "<p>Buen día, hacemos seguimiento…</p>"
+  }
+}
+```
+
+### Respuesta — `200 OK`
+
+`NotificationResponseDto` con `tipo: "SEGUIMIENTO"` e `instancias` con un único elemento.
+
+```json
+{
+  "id": 20,
+  "tipo": "SEGUIMIENTO",
+  "estado": "PROGRAMADA",
+  "idActividad": 1,
+  "idLead": 2,
+  "idResponsable": 3,
+  "asuntoInterno": null,
+  "fechaEnvioInterno": null,
+  "enviadoInterno": false,
+  "correoCliente": "cliente@empresa.com",
+  "createdAt": "2026-06-18T10:00:00.000Z",
+  "instancias": [
+    {
+      "id": 100,
+      "orden": 1,
+      "asuntoInterno": "Recordatorio interno actualizado",
+      "fechaEnvioInterno": "2026-06-20T14:00:00.000Z",
+      "enviadoInterno": false,
+      "asuntoExterno": "Seguimiento de su solicitud",
+      "fechaEnvioExterno": "2026-06-20T15:00:00.000Z",
+      "enviadoExterno": false
+    }
+  ]
+}
+```
+
+### Errores
+
+- **`404 NotFound`** si la notificación no existe.
+- **`409 Conflict`** (`FollowUpNotEditable`) si no es un seguimiento, no está en `PROGRAMADA`, o ya se envió alguno de los dos correos.
+- **`400/409`** si el lead no tiene actividad activa, `correoCliente` no pertenece al contacto, la plantilla no existe/está inactiva o las fechas violan las reglas de validación.
 
 Ver [tabla de errores](#errores) para el envelope completo.
 
