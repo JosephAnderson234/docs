@@ -217,14 +217,14 @@ Retrieve a single organization by its unique ID, along with a preview of its ass
 </ResponseField>
 
 <Note>
-  **Contact preview vs. full list.** `contactos` is capped at **6 items** to power the organization dashboard in a single request. When `totalContactos > 6` and you need to display every contact (or paginate / search them), use the paginated endpoint:
+  **Contact preview vs. full list.** `contactos` is capped at **6 items** to power the organization dashboard in a single request. When `totalContactos > 6` and you need to display every contact for the organization, use:
 
   ```http
-  GET /contacts?idOrganization=<id>&page=<n>&limit=<n>
+  GET /contacts/organization/:idOrganizacion
   Authorization: Bearer <token>
   ```
 
-  See [`GET /contacts`](/api/contacts/overview#get-contacts) for the full query-parameter reference.
+  For paginated global search, use [`GET /contacts`](/api/contacts/overview#get-contacts) with `search`, `page`, and `limit`.
 </Note>
 
 ### Errors
