@@ -139,15 +139,49 @@ Create a new organization record.
 
 ## GET /organizations
 
-Retrieve a list of all organizations in the system.
+Listado paginado de organizaciones, ordenado por fecha de creación descendente (`createdAt DESC`).
+
+Este endpoint es el que usa el frontend para buscar una organización por nombre y obtener su `id`.
 
 <Note>
   Authentication is not required for this endpoint at this time.
 </Note>
 
+### Query parameters
+
+<ParamField query="page" type="number">
+  Número de página. Valor por defecto: `1`.
+</ParamField>
+
+<ParamField query="limit" type="number">
+  Cantidad máxima de resultados por página.
+</ParamField>
+
+<ParamField query="term" type="string">
+  Texto de búsqueda por `nombre` o `nombreComercial`.
+</ParamField>
+
+<ParamField query="sector" type="enum">
+  Filtra por sector (`Sector`), por ejemplo `TECNOLOGIA`.
+</ParamField>
+
+<ParamField query="tamano" type="enum">
+  Filtra por tamaño (`Size`), por ejemplo `MEDIANO`.
+</ParamField>
+
+<ParamField query="tipo" type="enum">
+  Filtra por tipo de organización (`EnterpriseType`), por ejemplo `EMPRESA_NACIONAL`.
+</ParamField>
+
+### Request example
+
+```http
+GET /organizations?page=1&limit=10&term=bio&sector=TECNOLOGIA&tamano=MEDIANO&tipo=EMPRESA_NACIONAL
+```
+
 ### Response
 
-**`200 OK`** — Returns an array of all organization objects.
+**`200 OK`** — Devuelve una respuesta paginada con las organizaciones que cumplen los filtros.
 
 <Note>
   This listing endpoint does **not** include the `contactos` / `totalContactos` fields. Those are only returned by [`GET /organizations/:id`](#get-organizations-id) (organization detail). Use the detail endpoint when you need the contact preview for an organization's dashboard.
