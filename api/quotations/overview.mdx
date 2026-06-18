@@ -1,7 +1,7 @@
 ---
 title: "Quotations API — Create and Manage Commercial Proposals"
 sidebarTitle: "Quotations"
-description: "CRUD endpoints for quotations in Bioactiva CRM. Create proposals linked to leads, update them, and filter by status, remitente, or date range."
+description: "CRUD endpoints for quotations in Bioactiva CRM. Create proposals linked to leads, update them, and filter by lead, organization, status, remitente, currency, or date range."
 ---
 
 The Quotations API lets you create and manage commercial proposals (cotizaciones) inside Bioactiva CRM. Every quotation is linked to a lead and to a sending user (remitente). The creating user (`idAuthor`) is captured automatically from your session — you never pass it in the request body. New quotations always start in `PENDIENTE` status and support soft-delete, so records are never physically removed from the database.
@@ -122,6 +122,10 @@ Use query parameters to filter the results. All parameters are optional. Results
   Filter quotations by lead ID.
 </ParamField>
 
+<ParamField query="idOrg" type="string (UUID)">
+  Filter quotations by the organization of the lead associated with each quotation.
+</ParamField>
+
 <ParamField query="estado" type="string">
   Filter by status. Accepted values: `PENDIENTE`, `ENVIADA`, `ACEPTADA`, `RECHAZADA`.
 </ParamField>
@@ -149,6 +153,12 @@ Use query parameters to filter the results. All parameters are optional. Results
 <ParamField query="limit" default="10" type="number">
   Number of results per page (minimum 1).
 </ParamField>
+
+**Request example**
+
+```http
+GET /quotations?idLead=12&idOrg=550e8400-e29b-41d4-a716-446655440000&estado=ENVIADA&tipo=USD&page=1&limit=10
+```
 
 **Response `200 OK`** — Paginated list of quotation objects wrapped in `data` and `meta`.
 

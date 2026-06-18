@@ -76,7 +76,7 @@ Create a new lead. The initial status is always `EN_PROSPECTO`.
   "createdAt": "2026-01-15T10:30:00.000Z",
   "updatedAt": "2026-01-15T10:30:00.000Z",
   "ultimoCambioEstado": "2026-01-15T10:30:00.000Z",
-  "activityAlert": "VERDE"
+  "activityAlert": "SIN_ACTIVIDADES"
 }
 ```
 
@@ -122,24 +122,22 @@ List leads with optional filters and pagination. Soft-deleted records are always
   Case-insensitive search applied to the `servicioInteres` field. Maximum 100 characters.
 </ParamField>
 
+<ParamField query="sector" type="string">
+  Filter leads by the organization's sector.
+</ParamField>
+
 <ParamField query="alertaActividad" type="string">
-  Filter leads by their [activity traffic light](#activityalert). Optional — when omitted, no traffic-light filter is applied. Only **pending, non-deleted** activities are considered, and the "yellow" threshold is `3 days` before each activity's `fechaFin`. Accepted enum values:
+  Filter leads by their [activity alert](#activityalert). Optional — when omitted, no activity-alert filter is applied. Only pending, non-deleted activities are considered. Accepted enum values:
 
   | Value | Matches leads whose `activityAlert` is… |
   | --- | --- |
-  | `TODAS` | `AMARILLO`**or**`ROJO` — any pending activity close to due or already overdue. |
-  | `POR_VENCER` | `AMARILLO` only — at least one pending activity due within 3 days and **none** overdue. |
-  | `VENCIDAS` | `ROJO` — at least one pending activity already overdue. |
+  | `SIN_ACTIVIDADES` | `SIN_ACTIVIDADES` |
+  | `PENDIENTE` | `PENDIENTE` |
+  | `EN_RIESGO` | `EN_RIESGO` |
+  | `POR_VENCER` | `POR_VENCER` |
 
   Any value outside this enum is rejected with `400 Bad Request`.
 </ParamField>
-
-<Warning>
-  **Breaking change.** The previous boolean query parameter `conActividadesPorVencer` has been removed. Migrate to `alertaActividad`:
-
-  - Before: `GET /leads?conActividadesPorVencer=true`
-  - Now: `GET /leads?alertaActividad=TODAS`
-</Warning>
 
 <ParamField query="fechaDesde" type="string (ISO 8601)">
   Lower bound for filtering by lead creation date (`createdAt`). Inclusive.
@@ -160,19 +158,19 @@ List leads with optional filters and pagination. Soft-deleted records are always
 ### Example request
 
 ```http
-GET /leads?estado=EN_PROSPECTO&search=consulting&alertaActividad=TODAS&fechaDesde=2026-01-01&fechaHasta=2026-06-30&page=1&limit=10
+GET /leads?estado=EN_PROSPECTO&search=consulting&sector=Salud&alertaActividad=EN_RIESGO&fechaDesde=2026-01-01&fechaHasta=2026-06-30&page=1&limit=10
 Authorization: Bearer <token>
 ```
 
-Additional traffic-light filter examples:
+Additional activity-alert filter examples:
 
 ```http
-GET /leads?alertaActividad=VENCIDAS&estado=EN_PROSPECTO
+GET /leads?alertaActividad=POR_VENCER&estado=OFERTADO
 Authorization: Bearer <token>
 ```
 
 ```http
-GET /leads?alertaActividad=POR_VENCER
+GET /leads?alertaActividad=SIN_ACTIVIDADES
 Authorization: Bearer <token>
 ```
 
@@ -198,7 +196,7 @@ Each element of `data` follows the [response field reference](#response-field-re
 
 | Status | `kind` | When |
 | --- | --- | --- |
-| `400 Bad Request` | `validation` | `fechaHasta` is earlier than `fechaDesde`, either date is not a valid ISO 8601 string, or `alertaActividad` is not one of `TODAS`, `POR_VENCER`, `VENCIDAS`. |
+| `400 Bad Request` | `validation` | `fechaHasta` is earlier than `fechaDesde`, either date is not a valid ISO 8601 string, or `alertaActividad` is not one of `SIN_ACTIVIDADES`, `PENDIENTE`, `EN_RIESGO`, `POR_VENCER`. |
 
 ---
 
@@ -301,16 +299,17 @@ Soft-delete a lead. The record is logically deleted — it is excluded from all 
 | `createdAt` | ISO 8601 | Creation timestamp |
 | `updatedAt` | ISO 8601 | Last update timestamp |
 | `ultimoCambioEstado` | ISO 8601 | Timestamp of the last status change |
-| `activityAlert` | string | Activity traffic light for this lead. See [`activityAlert`](#activityalert) below. |
+| `activityAlert` | string | Activity alert for this lead. See [`activityAlert`](#activityalert) below. |
 
 ### `activityAlert`
 
-Traffic-light summary of the lead's **pending** activities, computed at query time from each activity's `fechaFin`:
+Activity-alert summary of the lead's pending activities. Severity order (low → high): `SIN_ACTIVIDADES` < `PENDIENTE` < `EN_RIESGO` < `POR_VENCER`.
 
 | Value | Meaning |
 | --- | --- |
-| `VERDE` | Up to date — no pending activities, or all pending activities are due more than 3 days from now. |
-| `AMARILLO` | At least one pending activity is due within the next 3 days (and none are overdue). |
-| `ROJO` | At least one pending activity is **overdue** (`fechaFin` already in the past). |
+| `SIN_ACTIVIDADES` | The lead has no pending activities. |
+| `PENDIENTE` | The lead has pending activities, but none are in risk or near due date. |
+| `EN_RIESGO` | At least one pending activity has already passed half of its available time window (between creation and its close date). |
+| `POR_VENCER` | At least one pending activity is due within the next 4 days or is already overdue. |
 
-Use the [`alertaActividad`](#query-parameters) query parameter to retrieve only leads whose `activityAlert` matches a given traffic-light state (`TODAS`, `POR_VENCER`, or `VENCIDAS`).
+Use the [`alertaActividad`](#query-parameters) query parameter to retrieve only leads whose `activityAlert` matches one of these same enum values.
