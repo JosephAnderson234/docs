@@ -1,0 +1,78 @@
+---
+title: "Quotations: Commercial Proposals Linked to Leads"
+sidebarTitle: "Quotations"
+description: "Quotations are formal commercial proposals in Bioactiva CRM. Accepting or rejecting a quotation automatically closes the linked lead."
+---
+
+A quotation (`cotización`) is a formal commercial proposal sent to a client, linked to a specific lead. Quotations are the mechanism by which you close a deal in Bioactiva CRM — accepting a quotation automatically closes its linked lead as `CIERRE_CON_VENTA`, and rejecting one closes it as `CIERRE_SIN_VENTA`. Both transitions are **atomic**: the quotation and the lead update together in a single transaction or neither updates at all.
+
+## Quotation Lifecycle
+
+Every quotation starts in `PENDIENTE` when you create it. You advance it through its states using dedicated transition endpoints.
+
+```
+PENDIENTE → ENVIADA   (via PATCH /quotations/:id/send)
+          ↘ ACEPTADA  (via PATCH /quotations/:id/accept)  → Lead: CIERRE_CON_VENTA
+          ↘ RECHAZADA (via PATCH /quotations/:id/reject)  → Lead: CIERRE_SIN_VENTA
+
+ENVIADA   → ACEPTADA  (via PATCH /quotations/:id/accept)  → Lead: CIERRE_CON_VENTA
+          ↘ RECHAZADA (via PATCH /quotations/:id/reject)  → Lead: CIERRE_SIN_VENTA
+```
+
+| Status | Meaning | Allowed from |
+|---|---|---|
+| `PENDIENTE` | Initial state. The quotation is drafted but not yet sent. | — |
+| `ENVIADA` | The quotation has been sent to the client. | `PENDIENTE` only |
+| `ACEPTADA` | The client accepted the proposal. Closes lead as `CIERRE_CON_VENTA`. | `PENDIENTE` or `ENVIADA` |
+| `RECHAZADA` | The client rejected the proposal. Closes lead as `CIERRE_SIN_VENTA`. | `PENDIENTE` or `ENVIADA` |
+
+<Warning>
+  `ACEPTADA` and `RECHAZADA` are terminal states. You cannot modify a quotation or change its status once it reaches either of these states. Any attempt to do so returns `400 Bad Request`.
+</Warning>
+
+## Concurrency Protection
+
+Quotations include built-in **concurrent modification protection** to prevent race conditions. If two simultaneous operations target the same quotation — for example, two `accept` calls arriving at the same time — the second request returns `409 Conflict` once the first has already changed the quotation's state.
+
+<Tip>
+  If you receive a `409 Conflict` on a quotation state transition, fetch the quotation's latest state with `GET /quotations/:id` and retry your operation based on the current state.
+</Tip>
+
+## Key Fields
+
+| Field | Type | Description |
+|---|---|---|
+| `dirigido` | string | Who the proposal is addressed to |
+| `nombreServicio` | string | Name of the service being quoted |
+| `monto` | string (numeric) | Amount as a decimal string (e.g., `"5000.00"`) |
+| `tipo` | enum | Currency: `PEN` (Peruvian Sol) or `USD` (US Dollar) |
+| `fechaCot` | ISO 8601 date | Date of the quotation |
+| `idLead` | number | The lead this quotation belongs to |
+| `idRemitente` | number | The user who is the sender/author of the quotation |
+| `linkPropuesta` | string | External URL to the full proposal document |
+| `estado` | string | Current status of the quotation |
+
+## Snapshot Field
+
+The `nombreRemitente` field is captured as a **snapshot** at the time you create the quotation. It stores the sender's name as it was at creation and does not update if the user later changes their name in the system.
+
+The API response includes both:
+- `nombreRemitente` — the snapshot name captured at creation.
+- `remitenteName` — the sender's current name, resolved via a live JOIN.
+
+<Note>
+  You never supply `nombreRemitente` in the request body. The API derives it automatically from the user identified by `idRemitente` at the moment of creation.
+</Note>
+
+## Soft Delete
+
+Deleting a quotation via `DELETE /quotations/:id` performs a soft delete. The record is logically deleted and excluded from all subsequent list and detail queries. The quotation is not physically removed from the database.
+
+<CardGroup cols={2}>
+  <Card title="Quotations API Overview" icon="file-invoice-dollar" href="/api/quotations/overview">
+    Explore all quotation endpoints: create, list, retrieve, update, and delete.
+  </Card>
+  <Card title="Quotation Lifecycle" icon="arrow-right-arrow-left" href="/api/quotations/lifecycle">
+    Learn how to send, accept, and reject quotations and how they close leads.
+  </Card>
+</CardGroup>

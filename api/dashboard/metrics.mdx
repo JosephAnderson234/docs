@@ -1,0 +1,92 @@
+---
+title: "GET /dashboard/metrics — Sales KPIs"
+sidebarTitle: "GET /dashboard/metrics"
+description: "Retrieve an aggregated snapshot of sales performance — 10 KPIs plus the resolved analysis window — for a configurable time range, optionally filtered by responsible user."
+---
+
+Return an aggregated snapshot of sales performance for a given time window. The response contains 10 KPIs covering lead volume, conversion, average ticket, pipeline value, closing time, and lead stagnation, plus the resolved `periodStart` and `periodEnd` of the analyzed window. Use this endpoint to power dashboards, executive reports, and per-responsible performance views.
+
+**Authentication:** Bearer JWT required (`Authorization: Bearer <token>`). See [Authentication](/authentication) for how to obtain and pass the token.
+
+**OpenAPI tag:** `dashboard`
+
+---
+
+## GET /dashboard/metrics
+
+Compute the KPIs over the requested time window. All query parameters are optional.
+
+### Query parameters
+
+<ParamField query="startDate" type="string (ISO 8601)">
+  Start of the analysis window. If omitted, defaults to **365 days ago**.
+</ParamField>
+
+<ParamField query="endDate" type="string (ISO 8601)">
+  End of the analysis window. If omitted, defaults to **now**.
+</ParamField>
+
+<ParamField query="idEncargado" type="number">
+  Filter metrics by the responsible user of the lead. Integer ≥ `1`. When provided, only leads assigned to this user are aggregated.
+</ParamField>
+
+### Example request
+
+```bash
+curl -X GET \
+  'https://api.bioactiva.com/dashboard/metrics?startDate=2026-01-01T00:00:00.000Z&endDate=2026-06-01T00:00:00.000Z&idEncargado=2' \
+  -H 'Authorization: Bearer <token>'
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "totalLeads": 142,
+  "averageTicketAmount": 18450.75,
+  "conversionRate": 23.94,
+  "avgClosingTimeDays": 27.5,
+  "proposalToCloseRate": 58.33,
+  "avgProposalStageDays": 11.2,
+  "avgActivitiesPerLead": 4.6,
+  "pipelineTotalAmount": 312800.5,
+  "closedRevenue": 627325.5,
+  "stalledLeadPercentage": 17.6,
+  "periodStart": "2026-01-01T00:00:00.000Z",
+  "periodEnd": "2026-06-01T00:00:00.000Z"
+}
+```
+
+### Response field reference
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `totalLeads` | number | Total leads created in the period. |
+| `averageTicketAmount` | number | Average ticket of quotations closed with a sale. |
+| `conversionRate` | number (%) | Leads closed with a sale ÷ total leads. |
+| `avgClosingTimeDays` | number | Average days from lead creation to close-with-sale. |
+| `proposalToCloseRate` | number (%) | Closes-with-sale ÷ (closes-with-sale \+ closes-without-sale). |
+| `avgProposalStageDays` | number | Average days current leads have spent in `OFERTADO`. |
+| `avgActivitiesPerLead` | number | Average number of activities logged per lead. |
+| `pipelineTotalAmount` | number | Total amount of quotations belonging to open (non-closed) leads. |
+| `closedRevenue` | number | Total revenue from quotations closed with a sale. |
+| `stalledLeadPercentage` | number (%) | Percentage of stalled leads — open leads with no status change in the last 30 days. |
+| `periodStart` | ISO 8601 date-time | Resolved start of the analyzed window. |
+| `periodEnd` | ISO 8601 date-time | Resolved end of the analyzed window. |
+
+<Note>
+  **Percentages are returned as numbers, not fractions.** A value of `25` means `25%`, not `0.25`.
+</Note>
+
+<Note>
+  **About `avgClosingTimeDays`:** the KPI is computed using the lead's real closing timestamp (`Lead.fechaCierre`), which is sealed when a lead transitions to `CIERRE_CON_VENTA`. Leads that were closed **before this feature was released** do not have `fechaCierre` and are excluded from the average. The metric is exact from this release onward.
+</Note>
+
+### Errors
+
+| Status | When |
+| --- | --- |
+| `400` | Invalid query parameter — for example, `startDate` / `endDate` not in ISO 8601 format, or `idEncargado` \< `1`. |
+| `401` | Missing or invalid JWT. See [Authentication](/authentication). |
+
+See [Errors](/errors) for the full error response shape.

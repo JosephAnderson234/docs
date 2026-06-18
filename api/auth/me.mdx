@@ -1,0 +1,91 @@
+---
+title: "GET /auth/me — Retrieve the Authenticated User"
+sidebarTitle: "GET /auth/me"
+description: "Return the profile of the currently authenticated user. Requires a valid JWT access token in the Authorization header."
+---
+
+Use this endpoint to retrieve the profile of the currently authenticated user. The response is derived directly from the JWT you provide, so it always reflects the account that owns the token. This is useful for populating user profile UIs or verifying session details after login.
+
+## Endpoint
+
+```
+GET /auth/me
+```
+
+## Authentication
+
+`Authorization: Bearer <accessToken>` — **required**. You must include a valid, unexpired JWT access token obtained from `POST /auth/login` or `POST /auth/refresh`.
+
+## Request Example
+
+```http
+GET /auth/me
+Authorization: Bearer eyJhbGciOi...
+```
+
+## Response
+
+### `200 OK`
+
+```json
+{
+  "id": 1,
+  "nombres": "Juan",
+  "apellidos": "Pérez",
+  "correo": "usuario@dominio.com",
+  "role": 1,
+  "estado": 1,
+  "created_at": "2026-05-19T00:00:00.000Z",
+  "updated_at": "2026-05-19T00:00:00.000Z"
+}
+```
+
+<ResponseField name="id" type="number">
+  Unique numeric identifier of the authenticated user.
+</ResponseField>
+
+<ResponseField name="nombres" type="string">
+  First name(s) of the user.
+</ResponseField>
+
+<ResponseField name="apellidos" type="string">
+  Last name(s) of the user.
+</ResponseField>
+
+<ResponseField name="correo" type="string">
+  Email address of the user.
+</ResponseField>
+
+<ResponseField name="role" type="number">
+  Numeric role identifier assigned to the user (e.g. `1` for administrator, `2` for worker).
+</ResponseField>
+
+<ResponseField name="estado" type="number">
+  Numeric account status code (e.g. `1` for active, `0` for suspended).
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of when the user account was created.
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  ISO 8601 timestamp of the most recent update to the user record.
+</ResponseField>
+
+<Note>
+  The `password` field is **never** included in API responses. User passwords are stored in hashed form and are not returned by any endpoint.
+</Note>
+
+## Errors
+
+| Status | When |
+|---|---|
+| `401` | No token provided, token has expired, or token is invalid |
+
+```json
+{
+  "statusCode": 401,
+  "message": "No autorizado",
+  "error": "Unauthorized"
+}
+```

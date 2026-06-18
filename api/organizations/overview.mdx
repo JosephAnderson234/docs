@@ -1,0 +1,354 @@
+---
+title: "Organizations API — Create, List, and Update Companies"
+sidebarTitle: "Organizations"
+description: "CRUD endpoints for organizations in Bioactiva CRM. Create companies, retrieve by ID, update details, and query by SUNAT RUC or name."
+---
+
+Use the Organizations API to manage the companies and entities in your Bioactiva CRM. You can create new organization records, retrieve them individually or in bulk, and update their details at any time. When you supply a RUC, the API automatically validates it against Peru's SUNAT registry before saving.
+
+---
+
+## POST /organizations
+
+Create a new organization record.
+
+<Note>
+  Authentication is not required for this endpoint at this time.
+</Note>
+
+### Request body
+
+<ParamField body="codigoCliente" type="string" required>
+  Your internal client code. Maximum 20 characters.
+</ParamField>
+
+<ParamField body="nombre" type="string" required>
+  The organization's full legal name. Maximum 120 characters.
+</ParamField>
+
+<ParamField body="nombreComercial" type="string" required>
+  The organization's commercial or brand name. Maximum 100 characters.
+</ParamField>
+
+<ParamField body="tipo" type="enum" required>
+  Organization type. Accepted values: `EMPRESA_NACIONAL`, `EMPRESA_EXTRANJERA`, `INDEPENDIENTE`.
+</ParamField>
+
+<ParamField body="tamano" type="enum" required>
+  Organization size. Accepted values: `MICRO`, `PEQUENO`, `MEDIANO`, `GRANDE`.
+</ParamField>
+
+<ParamField body="ruc" type="string">
+  Peru tax ID (RUC). Must be exactly 11 characters. When provided, the API validates this value against the SUNAT registry before creating the record.
+</ParamField>
+
+<ParamField body="sector" type="enum">
+  Industry sector. Must be a valid `Sector` enum value (e.g. `TECNOLOGIA`, `OTROS`).
+</ParamField>
+
+<ParamField body="ubicacion" type="string">
+  City or geographic location. Maximum 100 characters.
+</ParamField>
+
+<ParamField body="linkedin" type="string">
+  LinkedIn profile or company page URL. Maximum 255 characters.
+</ParamField>
+
+<ParamField body="subArea" type="string">
+  Sub-area or department within the organization. Maximum 60 characters.
+</ParamField>
+
+<ParamField body="actividadEconomica" type="string">
+  Description of the organization's primary economic activity. Maximum 120 characters.
+</ParamField>
+
+<ParamField body="alianzasEstrategicas" type="string">
+  Notes about strategic alliances or partnerships. Maximum 300 characters.
+</ParamField>
+
+<ParamField body="idContactoActivo" type="number">
+  ID of the primary active contact associated with this organization.
+</ParamField>
+
+<ParamField body="idAuthor" type="number" required>
+  ID of the user creating this organization record.
+</ParamField>
+
+### Request example
+
+```json
+{
+  "codigoCliente": "CLI-001",
+  "nombre": "TechCorp S.A.C.",
+  "nombreComercial": "TechCorp",
+  "ruc": "20123456789",
+  "tipo": "EMPRESA_NACIONAL",
+  "tamano": "PEQUENO",
+  "sector": "TECNOLOGIA",
+  "ubicacion": "Lima",
+  "idAuthor": 1
+}
+```
+
+### Response
+
+**`201 Created`** — Returns the newly created organization object.
+
+### Errors
+
+| Status | `error` | `kind` | When |
+| --- | --- | --- | --- |
+| `400 Bad Request` | — | `validation` | DTO validation failed, RUC is not exactly 11 digits, RUC is already registered to another organization, or RUC was not found in SUNAT. |
+| `409 Conflict` | `DuplicateClientCodeException` | `conflict` | The supplied `codigoCliente` already belongs to **another** organization. Validated even if the organization has no RUC. |
+
+<Note>
+  Form-field validation errors (`kind: validation`) are returned in **Spanish**. This applies to every field on the organization form (`codigoCliente`, `nombre`, `nombreComercial`, `subArea`, `ruc`, `tipo`, `linkedin`, `ubicacion`, `sector`, `tamano`, `actividadEconomica`, `alianzasEstrategicas`, etc.).
+</Note>
+
+**`400 Bad Request`** — DTO validation failed (messages returned in Spanish):
+
+```json
+{
+  "statusCode": 400,
+  "kind": "validation",
+  "message": [
+    "La ubicación debe tener entre 1 y 100 caracteres.",
+    "La actividad económica debe tener entre 1 y 120 caracteres.",
+    "El RUC debe tener exactamente 11 caracteres.",
+    "El tipo de empresa no es un valor válido."
+  ],
+  "path": "/organizations",
+  "timestamp": "2026-06-04T10:30:00.000Z"
+}
+```
+
+**`409 Conflict`** — `codigoCliente` already in use by another organization:
+
+```json
+{
+  "statusCode": 409,
+  "error": "DuplicateClientCodeException",
+  "kind": "conflict",
+  "message": "El código de cliente \"CLI-001\" ya está registrado en otra organización. Ingrese un código distinto.",
+  "path": "/organizations",
+  "timestamp": "2026-06-04T10:30:00.000Z"
+}
+```
+
+---
+
+## GET /organizations
+
+Retrieve a list of all organizations in the system.
+
+<Note>
+  Authentication is not required for this endpoint at this time.
+</Note>
+
+### Response
+
+**`200 OK`** — Returns an array of all organization objects.
+
+<Note>
+  This listing endpoint does **not** include the `contactos` / `totalContactos` fields. Those are only returned by [`GET /organizations/:id`](#get-organizations-id) (organization detail). Use the detail endpoint when you need the contact preview for an organization's dashboard.
+</Note>
+
+<Note>
+  **Soft-deleted organizations are excluded by default.** Organizations that have been deactivated via [`DELETE /organizations/:id`](#delete-organizations-id-desactivar-soft-delete) are filtered out of this listing. Uniqueness checks on `ruc` and `codigoCliente` continue to consider deactivated organizations to preserve the annual-monitoring `codigoCliente`.
+</Note>
+
+---
+
+## GET /organizations/:id
+
+Retrieve a single organization by its unique ID, along with a preview of its associated contacts. Designed to feed the organization dashboard in a single call.
+
+**Authentication**: JWT required. Pass your access token as `Authorization: Bearer <token>`.
+
+### Path parameters
+
+<ParamField path="id" type="string (UUID)" required>
+  The UUID of the organization to retrieve.
+</ParamField>
+
+### Response
+
+**`200 OK`** — Returns the matching organization object enriched with a contact preview and the total contact count.
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "codigoCliente": "CLI-001",
+  "nombre": "Bioactiva SAC",
+  "nombreComercial": "Bioactiva",
+  "ruc": "20123456789",
+  "tipo": "EMPRESA_NACIONAL",
+  "tamano": "MEDIANO",
+  "sector": "TECNOLOGIA",
+  "ubicacion": "Lima",
+  "contactos": [
+    {
+      "id": 1,
+      "nombres": "María",
+      "apellidos": "García",
+      "vocativo": "SRA",
+      "cargo": "Gerente Comercial",
+      "correo": "maria.garcia@empresa.com",
+      "telefono": "+51 987654321",
+      "correo2": null,
+      "comentarios": null,
+      "estado_correo": "VIGENTE",
+      "idOrganizacion": "550e8400-e29b-41d4-a716-446655440000",
+      "organizacionNombre": "Bioactiva SAC",
+      "idAuthor": 3,
+      "createdAt": "2025-05-27T12:00:00.000Z"
+    }
+  ],
+  "totalContactos": 14
+}
+```
+
+<ResponseField name="contactos" type="ContactResponseDto[]">
+  Preview of the contacts linked to this organization. Returns **at most 6** items, ordered by the backend's default contact order. Each item follows the same shape as the `ContactResponseDto` documented in [Contacts → Response field reference](/api/contacts/overview#response-field-reference).
+</ResponseField>
+
+<ResponseField name="totalContactos" type="number">
+  Total number of contacts associated with this organization, regardless of how many are returned in `contactos`.
+</ResponseField>
+
+<Note>
+  **Contact preview vs. full list.** `contactos` is capped at **6 items** to power the organization dashboard in a single request. When `totalContactos > 6` and you need to display every contact (or paginate / search them), use the paginated endpoint:
+
+  ```http
+  GET /contacts?idOrganization=<id>&page=<n>&limit=<n>
+  Authorization: Bearer <token>
+  ```
+
+  See [`GET /contacts`](/api/contacts/overview#get-contacts) for the full query-parameter reference.
+</Note>
+
+### Errors
+
+| Status | Description |
+| --- | --- |
+| `404 Not Found` | No organization with the given ID exists, or the organization has been deactivated (soft-deleted). |
+
+<Note>
+  Soft-deleted organizations are also excluded from this endpoint by default — fetching a deactivated organization by ID responds `404 Not Found`. Uniqueness checks on `ruc` and `codigoCliente` continue to consider deactivated organizations.
+</Note>
+
+---
+
+## PATCH /organizations/:id
+
+Partially update an existing organization. Send only the fields you want to change — all body fields are optional.
+
+<Note>
+  Authentication is not required for this endpoint at this time.
+</Note>
+
+### Path parameters
+
+<ParamField path="id" type="string (UUID)" required>
+  The UUID of the organization to update.
+</ParamField>
+
+### Request body
+
+All fields are optional and follow the same rules as [`POST /organizations`](#post-organizations).
+
+```json
+{
+  "nombre": "TechCorp Solutions S.A.C.",
+  "tamano": "MEDIANO"
+}
+```
+
+### Response
+
+**`200 OK`** — Returns the updated organization object.
+
+### Errors
+
+| Status | `error` | `kind` | When |
+| --- | --- | --- | --- |
+| `400 Bad Request` | — | `validation` | DTO validation failed, the new RUC is already registered to another organization, or it fails SUNAT validation. |
+| `409 Conflict` | `DuplicateClientCodeException` | `conflict` | The new `codigoCliente` already belongs to **another** organization. Only validated when `codigoCliente` actually changes — keeping the same code in the update body never triggers this error. Applies even if the organization has no RUC. |
+| `404 Not Found` | — | `not_found` | No organization with the given ID exists. |
+
+<Note>
+  Form-field validation errors (`kind: validation`) are returned in **Spanish**, matching the [`POST /organizations`](#post-organizations) behavior.
+</Note>
+
+**`400 Bad Request`** — DTO validation failed (messages returned in Spanish):
+
+```json
+{
+  "statusCode": 400,
+  "kind": "validation",
+  "message": [
+    "La ubicación debe tener entre 1 y 100 caracteres.",
+    "El RUC debe tener exactamente 11 caracteres.",
+    "El tipo de empresa no es un valor válido."
+  ],
+  "path": "/organizations/123e4567-e89b-12d3-a456-426614174000",
+  "timestamp": "2026-06-04T10:30:00.000Z"
+}
+```
+
+**`409 Conflict`** — `codigoCliente` already in use by another organization:
+
+```json
+{
+  "statusCode": 409,
+  "error": "DuplicateClientCodeException",
+  "kind": "conflict",
+  "message": "El código de cliente \"CLI-001\" ya está registrado en otra organización. Ingrese un código distinto.",
+  "path": "/organizations/123e4567-e89b-12d3-a456-426614174000",
+  "timestamp": "2026-06-04T10:30:00.000Z"
+}
+```
+
+---
+
+## DELETE /organizations/:id — Desactivar (soft-delete)
+
+Deactivate an organization **without physically deleting it**. The organization's `codigoCliente` is preserved so the annual monitoring workflow continues to work. In the same database transaction, every contact belonging to the organization has its `estado_correo` set to `VENCIDO`, which prevents them from being linked to new leads.
+
+**Authentication**: JWT required. Pass your access token as `Authorization: Bearer <token>`.
+
+### Path parameters
+
+<ParamField path="id" type="string (UUID)" required>
+  The UUID of the organization to deactivate.
+</ParamField>
+
+### Request example
+
+```http
+DELETE /organizations/550e8400-e29b-41d4-a716-446655440000
+Authorization: Bearer <token>
+```
+
+### Response
+
+**`200 OK`** — Returns a minimal confirmation envelope.
+
+```json
+{ "ok": true }
+```
+
+### Errors
+
+| Status | `kind` | When |
+| --- | --- | --- |
+| `404 Not Found` | `not_found` | No organization with the given ID exists, or it has already been deactivated. |
+
+<Note>
+  **Soft-delete semantics**
+
+  - The organization row is **not** deleted; only its active flag changes. `codigoCliente` and `ruc` remain reserved so future uniqueness checks continue to detect them.
+  - **All contacts** of the organization are transactionally updated to `estado_correo = VENCIDO`. The contacts themselves are **not** deleted; they simply become ineligible to be linked to leads (see [Contacts → soft-delete semantics](/api/contacts/overview#patch-contacts-id-estado-correo)).
+  - After deactivation, the organization is **excluded by default** from [`GET /organizations`](#get-organizations) and [`GET /organizations/:id`](#get-organizations-id). Calling either endpoint for a deactivated organization responds `404 Not Found`.
+  - Internal uniqueness checks on `ruc` and `codigoCliente` (used by `POST /organizations` and `PATCH /organizations/:id`) **still see** deactivated organizations, so the same code cannot be re-registered while the deactivated record remains in the database.
+</Note>

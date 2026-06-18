@@ -1,0 +1,386 @@
+---
+title: "Activities API — Log and Manage Lead Interactions"
+sidebarTitle: "Activities"
+description: "CRUD endpoints for activities in Bioactiva CRM. Create meetings, calls, and emails linked to leads, with optional Outlook Calendar sync."
+---
+
+<Warning>
+  **Breaking:** el endpoint `POST /activities` ya **no** acepta `syncWithMicrosoft` ni `createTeamsMeeting`. El evento de Outlook/Teams **ya no se crea automáticamente** al registrar la actividad; ahora se crea **bajo demanda** con [`POST /activities/{id}/calendar-event`](#post-activities-id-calendar-event).
+</Warning>
+
+Use these endpoints to log and manage commercial interactions associated with a lead — including meetings, calls, emails, and other touchpoints. Each activity belongs to a lead and a responsible user, and supports on-demand synchronization with Microsoft Outlook Calendar and Teams. All routes require a valid JWT.
+
+<Note>
+  Only one activity per lead can be in `PENDIENTE` state at a time. Attempting to create a second pending activity for the same lead returns `409 Conflict`.
+</Note>
+
+---
+
+## POST /activities
+
+Create a new activity. The initial status is always `PENDIENTE`.
+
+**Authentication:** Bearer JWT required (`Authorization: Bearer <token>`).
+
+### Request body
+
+<ParamField body="idLead" type="number" required>
+  ID of the lead this activity is linked to. The lead must exist and must not have been soft-deleted.
+</ParamField>
+
+<ParamField body="nombreActividad" type="string" required>
+  Name or title of the activity. Maximum 90 characters.
+</ParamField>
+
+<ParamField body="fechaInicio" type="string (ISO 8601)" required>
+  Start date and time of the activity. **No puede ser anterior a la fecha actual** (se acepta hoy a cualquier hora o una fecha futura; un día anterior a hoy se rechaza). Must be strictly before `fechaFin`.
+</ParamField>
+
+<ParamField body="fechaFin" type="string (ISO 8601)" required>
+  End date and time of the activity. Must be strictly after `fechaInicio`.
+</ParamField>
+
+<ParamField body="tipo" type="enum" required>
+  Type of activity. One of: `REUNION`, `LLAMADA`, `EMAIL`, `OTRO`.
+</ParamField>
+
+<ParamField body="idResponsable" type="number" deprecated>
+  **Deprecated.** El responsable de la actividad es siempre el encargado del lead; cualquier `idResponsable` enviado se **ignora**. Mantener el campo en clientes existentes no produce error, pero no tiene efecto.
+</ParamField>
+
+<ParamField body="notas" type="string">
+  Notes or comments about the activity. Maximum 1 000 characters.
+</ParamField>
+
+### Example request
+
+```json
+{
+  "idLead": 1,
+  "nombreActividad": "Discovery call",
+  "fechaInicio": "2026-06-10T14:00:00.000Z",
+  "fechaFin": "2026-06-10T15:00:00.000Z",
+  "tipo": "LLAMADA",
+  "notas": "Discuss requirements and timeline",
+  "idResponsable": 3
+}
+```
+
+### Response — `201 Created`
+
+Returns the full activity object. See the [response field reference](#response-field-reference) below.
+
+```json
+{
+  "id": 1,
+  "nombreActividad": "Discovery call",
+  "tipo": "LLAMADA",
+  "estado": "PENDIENTE",
+  "fechaInicio": "2026-06-10T14:00:00.000Z",
+  "fechaFin": "2026-06-10T15:00:00.000Z",
+  "notas": "Discuss requirements and timeline",
+  "idLead": 1,
+  "leadServicioInteres": "Digital transformation consulting",
+  "leadEstado": "EN_PROSPECTO",
+  "idResponsable": 3,
+  "responsableName": "Carlos López",
+  "outlookEventId": null,
+  "teamsMeetingUrl": null,
+  "createdAt": "2026-06-01T10:30:00.000Z",
+  "updatedAt": "2026-06-01T10:30:00.000Z"
+}
+```
+
+### Errors
+
+| Status | When |
+| --- | --- |
+| `400` | `fechaInicio` is not before `fechaFin`, **`fechaInicio` is a date before today** (`"La fecha de la actividad no puede ser anterior a la fecha actual"`), or the request body fails validation |
+| `404` | Lead not found |
+| `409` | The lead already has an activity in `PENDIENTE` state |
+
+<Note>
+  `outlookEventId` and `teamsMeetingUrl` are always `null` on creation. To create the Outlook event and Teams meeting, call [`POST /activities/{id}/calendar-event`](#post-activities-id-calendar-event) afterwards.
+</Note>
+
+---
+
+## POST /activities/{id}/calendar-event
+
+Crea el evento en Microsoft Calendar y la reunión de Teams para una actividad de **tipo Reunión**, y vincula `outlookEventId` \+ `teamsMeetingUrl` a la actividad. Acción manual desde la pestaña Calendario (CU007, pasos 83–90). Requiere que el **encargado** de la actividad tenga Microsoft conectado.
+
+**Authentication:** Bearer JWT required (`Authorization: Bearer <token>`).
+
+### Path parameters
+
+<ParamField path="id" type="integer" required>
+  ID de la actividad.
+</ParamField>
+
+### Request body
+
+Ninguno.
+
+### Example request
+
+```bash
+curl -X POST \
+  'https://api.bioactiva.com/activities/34/calendar-event' \
+  -H 'Authorization: Bearer <token>'
+```
+
+### Response — `201 Created`
+
+Objeto `ActivityResponseDto` (mismo esquema que `GET /activities/{id}`), ahora con `outlookEventId` y `teamsMeetingUrl` poblados.
+
+```json
+{
+  "id": 34,
+  "nombreActividad": "Reunión con BioGreen SAC",
+  "tipo": "REUNION",
+  "estado": "PENDIENTE",
+  "fechaInicio": "2026-06-20T15:00:00.000Z",
+  "fechaFin": "2026-06-20T16:00:00.000Z",
+  "notas": "Revisar propuesta",
+  "idLead": 12,
+  "leadServicioInteres": "Consultoría de innovación",
+  "leadEstado": "EN_PROSPECTO",
+  "idResponsable": 7,
+  "responsableName": "Karien Diaz",
+  "outlookEventId": "AAMkAGI2...",
+  "teamsMeetingUrl": "https://teams.microsoft.com/l/meetup-join/...",
+  "createdAt": "2026-06-14T20:00:00.000Z",
+  "updatedAt": "2026-06-14T20:10:00.000Z"
+}
+```
+
+### Errors
+
+Envelope estándar `{ statusCode, error, kind, message, path, timestamp }`.
+
+| statusCode | kind | Cuándo |
+| --- | --- | --- |
+| `400` | `Validation` | La actividad no es de tipo `REUNION` (`ActivityNotMeetingException`) |
+| `400` | `Validation` | El encargado no tiene Microsoft conectado (`ResponsibleNotConnectedException`) |
+| `401` | `Unauthorized` | Sin token Bearer |
+| `404` | `NotFound` | Actividad no encontrada (`ActivityNotFoundException`) |
+| `409` | `Conflict` | La actividad ya tiene un evento de calendario (`ActivityCalendarEventAlreadyExistsException`) |
+
+---
+
+## GET /activities
+
+List activities with optional filters and pagination. Soft-deleted records are always excluded.
+
+**Authentication:** Bearer JWT required.
+
+### Query parameters
+
+<ParamField query="idLead" type="number">
+  Filter activities by lead ID.
+</ParamField>
+
+<ParamField query="idResponsable" type="number">
+  Filter activities by the responsible user's ID.
+</ParamField>
+
+<ParamField query="estado" type="string">
+  Filter by activity status. One of: `PENDIENTE`, `REALIZADA`, `CANCELADA`.
+</ParamField>
+
+<ParamField query="tipo" type="string">
+  Filter by activity type. One of: `REUNION`, `LLAMADA`, `EMAIL`, `OTRO`.
+</ParamField>
+
+<ParamField query="fechaInicio" type="string (ISO 8601)">
+  Return only activities whose `fechaInicio` is **on or after** this value.
+</ParamField>
+
+<ParamField query="fechaFin" type="string (ISO 8601)">
+  Return only activities whose `fechaInicio` is **on or before** this value.
+</ParamField>
+
+<ParamField query="page" default="1" type="number">
+  Page number. Minimum `1`.
+</ParamField>
+
+<ParamField query="limit" default="10" type="number">
+  Number of results per page. Minimum `1`.
+</ParamField>
+
+### Example request
+
+```http
+GET /activities?idLead=1&estado=PENDIENTE&tipo=LLAMADA&page=1&limit=10
+Authorization: Bearer <token>
+```
+
+### Response — `200 OK`
+
+Returns a paginated object with `data` (array of activity objects) and `meta` (pagination info).
+
+---
+
+## GET /activities/:id
+
+Retrieve a single activity by its numeric ID, including resolved lead and responsible user data. Soft-deleted records are not returned.
+
+**Authentication:** Bearer JWT required.
+
+### Response — `200 OK`
+
+Returns a single activity object with the same structure as one element of the `GET /activities` data array.
+
+### Errors
+
+| Status | When |
+| --- | --- |
+| `404` | Activity not found or has been soft-deleted |
+
+---
+
+## PATCH /activities/:id
+
+Update one or more fields on an existing activity. All fields are optional — only the fields you include will be changed. You cannot modify `estado`, `idLead`, `createdAt`, or the soft-delete timestamp through this endpoint.
+
+**Authentication:** Bearer JWT required.
+
+### Allowed fields
+
+`nombreActividad`, `fechaInicio`, `fechaFin`, `notas`
+
+<Note>
+  **`idResponsable` is deprecated.** El responsable se hereda siempre del encargado del lead. Si se envía `idResponsable`, el servidor lo **ignora** silenciosamente.
+</Note>
+
+### Example request body
+
+```json
+{
+  "nombreActividad": "Follow-up call",
+  "fechaFin": "2026-06-10T16:00:00.000Z"
+}
+```
+
+### Response — `200 OK`
+
+Returns the updated activity object.
+
+### Errors
+
+| Status | When |
+| --- | --- |
+| `400` | The resulting date combination is invalid (`fechaInicio` ≥ `fechaFin`), or validation fails |
+| `404` | Activity not found |
+
+<Note>
+  If the activity already has an `outlookEventId`, changes to `nombreActividad`, `fechaInicio`, `fechaFin`, and `notas` are automatically propagated to the linked Outlook event. A Microsoft sync failure will not block the CRM update — the activity is saved and the error is logged.
+</Note>
+
+---
+
+## PATCH /activities/:id/notes
+
+Actualiza **solo las notas** de una actividad, de forma aislada del resto de campos. Útil para editar comentarios sin tocar fechas, nombre o responsable.
+
+**Authentication:** Bearer JWT required.
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  ID de la actividad.
+</ParamField>
+
+### Request body
+
+<ParamField body="notas" type="string" required>
+  Notas de la actividad. **Entre 1 y 1 000 caracteres.**
+</ParamField>
+
+### Example request body
+
+```json
+{
+  "notas": "El cliente confirmó la reunión y solicitó incluir al equipo técnico."
+}
+```
+
+### Response — `200 OK`
+
+Devuelve el objeto completo de la actividad (`ActivityResponseDto`), con el mismo esquema que [`PATCH /activities/:id`](#patch-activities-id). Ver el [response field reference](#response-field-reference).
+
+### Errors
+
+| Status | When |
+| --- | --- |
+| `401` | Not authenticated |
+| `404` | Activity not found |
+
+---
+
+## DELETE /activities/:id
+
+Soft-delete an activity. The record is logically deleted — it is excluded from all subsequent queries but not physically removed from the database.
+
+**Authentication:** Bearer JWT required.
+
+### Response — `200 OK`
+
+```json
+{ "ok": true }
+```
+
+### Errors
+
+| Status | When |
+| --- | --- |
+| `404` | Activity not found or already deleted |
+
+---
+
+## Error response shape
+
+All error responses from the Activities API include additional fields to help you diagnose problems:
+
+```json
+{
+  "statusCode": 404,
+  "error": "ActivityNotFoundException",
+  "kind": "NotFound",
+  "message": "Actividad con id 99 no encontrada",
+  "path": "/activities/99",
+  "timestamp": "2026-05-31T10:30:00.000Z"
+}
+```
+
+| Field | Description |
+| --- | --- |
+| `statusCode` | HTTP status code |
+| `error` | Error type identifier |
+| `kind` | Broad category: `Validation`, `NotFound`, or `Conflict` |
+| `message` | Human-readable description of the problem |
+| `path` | The request path that triggered the error |
+| `timestamp` | UTC timestamp of when the error occurred |
+
+---
+
+## Response field reference
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | number | Activity ID |
+| `nombreActividad` | string | Activity name |
+| `tipo` | string | Type: `REUNION`, `LLAMADA`, `EMAIL`, or `OTRO` |
+| `estado` | string | Status: `PENDIENTE`, `REALIZADA`, or `CANCELADA` |
+| `fechaInicio` | ISO 8601 | Start date and time |
+| `fechaFin` | ISO 8601 | End date and time |
+| `notas` | string or null | Notes and comments |
+| `idLead` | number | ID of the linked lead |
+| `leadServicioInteres` | string | Lead's service of interest (resolved via JOIN) |
+| `leadEstado` | string | Lead's current pipeline status (resolved via JOIN) |
+| `idResponsable` | number | Responsible user ID |
+| `responsableName` | string | Responsible user's full name (resolved via JOIN) |
+| `outlookEventId` | string or null | Outlook Calendar event ID, if synced |
+| `teamsMeetingUrl` | string or null | Teams meeting URL, if a meeting was created |
+| `createdAt` | ISO 8601 | Creation timestamp |
+| `updatedAt` | ISO 8601 | Last update timestamp |

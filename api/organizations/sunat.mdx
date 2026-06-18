@@ -1,0 +1,151 @@
+---
+title: "GET /organizations/sunat — Look Up SUNAT Tax Data"
+sidebarTitle: "SUNAT Lookup"
+description: "Query Peru's SUNAT registry by RUC (11 digits) or company name to pre-fill organization data before creating a record."
+---
+
+Use this endpoint to look up a Peruvian company's official data from SUNAT before you create an organization record. Pass an 11-digit RUC for an exact single-result lookup, or supply a full or partial company name to search across the registry and receive an array of matching results. The returned data maps directly to the fields accepted by `POST /organizations`, so you can pre-fill your request body without manual data entry.
+
+---
+
+## Endpoint
+
+```text
+GET /organizations/sunat?query={query}
+```
+
+---
+
+## Authentication
+
+**Bearer JWT required.** Send a valid access token in the `Authorization` header: `Authorization: Bearer <token>`. Requests without a valid token are rejected with `401 Unauthorized`.
+
+---
+
+## Query parameters
+
+<ParamField query="query" type="string" required>
+  Either an 11-digit RUC for an exact lookup, or a company name (full or partial) for a text search. The value must be URL-encoded (e.g. spaces as `%20` — `?query=mi%20empresa`).
+</ParamField>
+
+---
+
+## Behavior
+
+- **RUC lookup** — If `query` is exactly 11 numeric digits, the API searches by RUC and returns a single result object.
+- **Name search** — If `query` is anything other than an 11-digit number, the API searches by company name and returns an array of matching results.
+
+<Note>
+  This endpoint queries an external SUNAT data service. If that service is unavailable, the request will fail. In that case, try again shortly or create the organization manually without supplying a RUC.
+</Note>
+
+---
+
+## Response — RUC lookup
+
+**`200 OK`**
+
+```json
+{
+  "ruc": "20123456789",
+  "razonSocial": "TECHCORP S.A.C.",
+  "nombreComercial": "TECHCORP",
+  "tipo": "EMPRESA_NACIONAL",
+  "ubicacion": "LIMA",
+  "actividadEconomica": "DESARROLLO DE SOFTWARE",
+  "tamano": "PEQUENO",
+  "sector": "TECNOLOGIA"
+}
+```
+
+<ResponseField name="ruc" type="string">
+  The company's 11-digit RUC tax identifier.
+</ResponseField>
+
+<ResponseField name="razonSocial" type="string">
+  The company's official legal name as registered with SUNAT. Maps to `nombre` in `POST /organizations`.
+</ResponseField>
+
+<ResponseField name="nombreComercial" type="string">
+  The company's commercial or brand name. Maps to `nombreComercial` in `POST /organizations`.
+</ResponseField>
+
+<ResponseField name="tipo" type="string | null">
+  Organization type (e.g. `EMPRESA_NACIONAL`, `EMPRESA_EXTRANJERA`, `INDEPENDIENTE`). Maps directly to `tipo`. Nullable — always returned as `null` in the name search response.
+</ResponseField>
+
+<ResponseField name="ubicacion" type="string | null">
+  City or region of the company's registered address. Maps to `ubicacion`. May be `null` if SUNAT does not include it.
+</ResponseField>
+
+<ResponseField name="actividadEconomica" type="string | null">
+  Primary economic activity description as registered with SUNAT. Maps to `actividadEconomica`. Nullable — always returned as `null` in the name search response.
+</ResponseField>
+
+<ResponseField name="tamano" type="string | null">
+  Company size classification (`MICRO`, `PEQUENO`, `MEDIANO`, `GRANDE`). Maps to `tamano`. Nullable — always returned as `null` in the name search response.
+</ResponseField>
+
+<ResponseField name="sector" type="string | null">
+  Industry sector (e.g. `TECNOLOGIA`, `OTROS`). Maps to `sector`. Nullable — always returned as `null` in the name search response.
+</ResponseField>
+
+---
+
+## Response — name search
+
+**`200 OK`**
+
+Returns an array of result objects with the same shape as the RUC lookup response, but with **partial data only**.
+
+<Warning>
+  The name search returns **partial data only**. SUNAT only exposes `ruc`, `razonSocial`, `nombreComercial`, and `ubicacion` in the search listing. The remaining fields (`tipo`, `tamano`, `sector`, `actividadEconomica`) are returned as `null`, and `ubicacion` may also be `null` if SUNAT does not include it.
+
+  To get the full data for a company, take its `ruc` from the search result and perform a second exact lookup by RUC (`GET /organizations/sunat?query=<ruc>`).
+</Warning>
+
+```json
+[
+  {
+    "ruc": "20123456789",
+    "razonSocial": "TECHCORP S.A.C.",
+    "nombreComercial": "TECHCORP S.A.C.",
+    "tipo": null,
+    "ubicacion": "LIMA",
+    "actividadEconomica": null,
+    "tamano": null,
+    "sector": null
+  }
+]
+```
+
+---
+
+## Errors
+
+| Status | Description |
+| --- | --- |
+| `401 Unauthorized` | Missing or invalid Bearer token. |
+| `404 Not Found` | No results were found in SUNAT for the given query. |
+
+---
+
+## Recommended workflow
+
+Use the SUNAT lookup to pre-fill your organization creation request and avoid data entry errors.
+
+<Steps>
+  <Step title="Look up the company by RUC">
+    Call `GET /organizations/sunat?query=20123456789` with the company's 11-digit RUC. The API returns the official SUNAT record for that taxpayer.
+  </Step>
+  <Step title="Pre-fill your POST /organizations request">
+    Map the returned fields directly to the `POST /organizations` body: use `razonSocial` → `nombre`, `nombreComercial`, `tipo`, `ubicacion`, `actividadEconomica`, `tamano`, and `sector`.
+  </Step>
+  <Step title="Create the organization">
+    Call `POST /organizations` with the pre-filled body. The API will re-validate the RUC against SUNAT automatically before saving the record.
+  </Step>
+</Steps>
+
+<Tip>
+  If you only have a company name and not the RUC, pass the name as the `query` query-string parameter (URL-encoded — e.g. `?query=mi%20empresa`). Review the returned array to identify the correct company before proceeding to step 2.
+</Tip>

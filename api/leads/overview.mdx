@@ -1,0 +1,316 @@
+---
+title: "Leads API — Create, List, Update, and Delete Opportunities"
+sidebarTitle: "Leads"
+description: "CRUD endpoints for leads in Bioactiva CRM. Create sales opportunities, list with filters, update details, and soft-delete records."
+---
+
+Use these endpoints to manage leads — the core sales opportunities in Bioactiva CRM. Each lead belongs to an organization, optionally links to a contact, and is always assigned to a responsible user. All routes require a valid JWT.
+
+---
+
+## POST /leads
+
+Create a new lead. The initial status is always `EN_PROSPECTO`.
+
+**Authentication:** Bearer JWT required (`Authorization: Bearer <token>`).
+
+### Request body
+
+<ParamField body="idOrg" type="string (UUID)" required>
+  Organization this lead belongs to. Must already exist in the system.
+</ParamField>
+
+<ParamField body="servicioInteres" type="string" required>
+  The service or product the prospect is interested in. Maximum 120 characters.
+</ParamField>
+
+<ParamField body="idEncargado" type="number" required>
+  ID of the user responsible for this lead. Must exist.
+</ParamField>
+
+<ParamField body="idContacto" type="number">
+  Contact linked to this lead. If provided, the contact must exist, belong to `idOrg`, and have `estado_correo: "VIGENTE"`. A contact whose `estado_correo` is `VENCIDO` (see [`PATCH /contacts/:id/estado-correo`](/api/contacts/overview#patch-contacts-id-estado-correo)) cannot be linked. Send `null` to leave this lead without a contact.
+</ParamField>
+
+<ParamField body="comentarios" type="string">
+  Additional notes about the lead. Maximum 500 characters.
+</ParamField>
+
+<ParamField body="desafioOportunidad" type="string">
+  Challenge or opportunity identified for this prospect. Maximum 500 characters.
+</ParamField>
+
+<ParamField body="canalCaptacion" type="string">
+  Acquisition channel through which the lead was sourced (e.g., `LinkedIn`, `Referral`). Maximum 60 characters.
+</ParamField>
+
+### Example request
+
+```json
+{
+  "idOrg": "123e4567-e89b-12d3-a456-426614174000",
+  "servicioInteres": "Digital transformation consulting",
+  "comentarios": "High priority client, decision expected Q3",
+  "canalCaptacion": "LinkedIn",
+  "idEncargado": 2
+}
+```
+
+### Response — `201 Created`
+
+```json
+{
+  "id": 1,
+  "estado": "EN_PROSPECTO",
+  "servicioInteres": "Digital transformation consulting",
+  "comentarios": "High priority client, decision expected Q3",
+  "desafioOportunidad": null,
+  "canalCaptacion": "LinkedIn",
+  "idOrg": "123e4567-e89b-12d3-a456-426614174000",
+  "organizationName": "TechCorp S.A.C.",
+  "idContacto": null,
+  "contactName": null,
+  "idEncargado": 2,
+  "encargadoName": "Carlos López",
+  "idAuthor": 3,
+  "createdAt": "2026-01-15T10:30:00.000Z",
+  "updatedAt": "2026-01-15T10:30:00.000Z",
+  "ultimoCambioEstado": "2026-01-15T10:30:00.000Z",
+  "activityAlert": "VERDE"
+}
+```
+
+<Note>
+  `idAuthor` is set automatically from your session. You do not need to include it in the request body.
+</Note>
+
+### Errors
+
+| Status | `error` | `kind` | When |
+| --- | --- | --- | --- |
+| `400` | — | `validation` | Contact does not exist or belongs to a different organization than `idOrg`. |
+| `400` | `LeadContactNotVigenteException` | `validation` | The contact exists and belongs to the organization, but its `estado_correo` is **not `VIGENTE`** (i.e. it is `VENCIDO`). Message: _"El contacto no se encuentra vigente"_. |
+| `404` | — | `not_found` | Organization (`idOrg`) or responsible user (`idEncargado`) not found. |
+
+<Note>
+  The initial status is always `EN_PROSPECTO`. To advance the lead through the pipeline, use `PATCH /leads/:id/status`.
+</Note>
+
+---
+
+## GET /leads
+
+List leads with optional filters and pagination. Soft-deleted records are always excluded.
+
+**Authentication:** Bearer JWT required.
+
+### Query parameters
+
+<ParamField query="estado" type="string">
+  Filter by pipeline status. One of: `EN_PROSPECTO`, `OFERTADO`, `CIERRE_CON_VENTA`, `CIERRE_SIN_VENTA`.
+</ParamField>
+
+<ParamField query="idOrg" type="string (UUID)">
+  Filter leads by organization UUID.
+</ParamField>
+
+<ParamField query="idEncargado" type="number">
+  Filter leads by the responsible user's ID.
+</ParamField>
+
+<ParamField query="search" type="string">
+  Case-insensitive search applied to the `servicioInteres` field. Maximum 100 characters.
+</ParamField>
+
+<ParamField query="alertaActividad" type="string">
+  Filter leads by their [activity traffic light](#activityalert). Optional — when omitted, no traffic-light filter is applied. Only **pending, non-deleted** activities are considered, and the "yellow" threshold is `3 days` before each activity's `fechaFin`. Accepted enum values:
+
+  | Value | Matches leads whose `activityAlert` is… |
+  | --- | --- |
+  | `TODAS` | `AMARILLO`**or**`ROJO` — any pending activity close to due or already overdue. |
+  | `POR_VENCER` | `AMARILLO` only — at least one pending activity due within 3 days and **none** overdue. |
+  | `VENCIDAS` | `ROJO` — at least one pending activity already overdue. |
+
+  Any value outside this enum is rejected with `400 Bad Request`.
+</ParamField>
+
+<Warning>
+  **Breaking change.** The previous boolean query parameter `conActividadesPorVencer` has been removed. Migrate to `alertaActividad`:
+
+  - Before: `GET /leads?conActividadesPorVencer=true`
+  - Now: `GET /leads?alertaActividad=TODAS`
+</Warning>
+
+<ParamField query="fechaDesde" type="string (ISO 8601)">
+  Lower bound for filtering by lead creation date (`createdAt`). Inclusive.
+</ParamField>
+
+<ParamField query="fechaHasta" type="string (ISO 8601)">
+  Upper bound for filtering by lead creation date (`createdAt`). Inclusive. Must be greater than or equal to `fechaDesde`; otherwise the API responds `400 Bad Request`.
+</ParamField>
+
+<ParamField query="page" default="1" type="number">
+  Page number. Minimum `1`.
+</ParamField>
+
+<ParamField query="limit" default="10" type="number">
+  Number of results per page. Minimum `1`.
+</ParamField>
+
+### Example request
+
+```http
+GET /leads?estado=EN_PROSPECTO&search=consulting&alertaActividad=TODAS&fechaDesde=2026-01-01&fechaHasta=2026-06-30&page=1&limit=10
+Authorization: Bearer <token>
+```
+
+Additional traffic-light filter examples:
+
+```http
+GET /leads?alertaActividad=VENCIDAS&estado=EN_PROSPECTO
+Authorization: Bearer <token>
+```
+
+```http
+GET /leads?alertaActividad=POR_VENCER
+Authorization: Bearer <token>
+```
+
+### Response — `200 OK`
+
+Returns a paginated object with `data` (array of lead objects) and `meta` (pagination info):
+
+```json
+{
+  "data": [ { "id": 1, "estado": "EN_PROSPECTO", "..." } ],
+  "meta": {
+    "page": 1,
+    "limit": 10,
+    "total": 1,
+    "totalPages": 1
+  }
+}
+```
+
+Each element of `data` follows the [response field reference](#response-field-reference) below.
+
+### Errors
+
+| Status | `kind` | When |
+| --- | --- | --- |
+| `400 Bad Request` | `validation` | `fechaHasta` is earlier than `fechaDesde`, either date is not a valid ISO 8601 string, or `alertaActividad` is not one of `TODAS`, `POR_VENCER`, `VENCIDAS`. |
+
+---
+
+## GET /leads/:id
+
+Retrieve a single lead by its numeric ID.
+
+**Authentication:** Bearer JWT required.
+
+### Response — `200 OK`
+
+Returns a single lead object with the same structure as one element of the `GET /leads` data array.
+
+### Errors
+
+| Status | When |
+| --- | --- |
+| `404` | Lead not found or has been soft-deleted |
+
+---
+
+## PATCH /leads/:id
+
+Update one or more fields on an existing lead. All fields are optional — only the fields you include will be changed.
+
+**Authentication:** Bearer JWT required.
+
+### Example request body
+
+```json
+{
+  "servicioInteres": "Cloud migration consulting",
+  "idContacto": null
+}
+```
+
+Sending `idContacto: null` unlinks the currently associated contact from the lead.
+
+### Errors
+
+| Status | `error` | `kind` | When |
+| --- | --- | --- | --- |
+| `400` | — | `validation` | New contact does not exist or belongs to a different organization. |
+| `400` | `LeadContactNotVigenteException` | `validation` | New contact's `estado_correo` is `VENCIDO`. Message: _"El contacto no se encuentra vigente"_. |
+| `404` | — | `not_found` | Lead, new organization, or new responsible user not found. |
+
+### Response — `200 OK`
+
+Returns the updated lead object (same structure as `GET /leads/:id`).
+
+---
+
+## PATCH /leads/:id/status
+
+Change the pipeline status of a lead. See [Change Status](/api/leads/status) for full details.
+
+---
+
+## DELETE /leads/:id
+
+Soft-delete a lead. The record is logically deleted — it is excluded from all subsequent queries but is not physically removed from the database.
+
+**Authentication:** Bearer JWT required.
+
+### Response — `200 OK`
+
+```json
+{ "ok": true }
+```
+
+### Errors
+
+| Status | When |
+| --- | --- |
+| `404` | Lead not found or already deleted |
+
+<Note>
+  Deletion is logical. The record is excluded from queries but not physically removed from the database. This preserves historical data integrity.
+</Note>
+
+---
+
+## Response field reference
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | number | Lead ID |
+| `estado` | string | Current pipeline status |
+| `servicioInteres` | string | Service or product of interest |
+| `comentarios` | string or null | Additional notes |
+| `desafioOportunidad` | string or null | Identified challenge or opportunity |
+| `canalCaptacion` | string or null | Acquisition channel |
+| `idOrg` | UUID | Organization ID |
+| `organizationName` | string | Organization name (resolved via JOIN) |
+| `idContacto` | number or null | Contact ID |
+| `contactName` | string or null | Contact full name (resolved via JOIN) |
+| `idEncargado` | number | Responsible user ID |
+| `encargadoName` | string | Responsible user name (resolved via JOIN) |
+| `idAuthor` | number | ID of the user who created the lead (set automatically from your session) |
+| `createdAt` | ISO 8601 | Creation timestamp |
+| `updatedAt` | ISO 8601 | Last update timestamp |
+| `ultimoCambioEstado` | ISO 8601 | Timestamp of the last status change |
+| `activityAlert` | string | Activity traffic light for this lead. See [`activityAlert`](#activityalert) below. |
+
+### `activityAlert`
+
+Traffic-light summary of the lead's **pending** activities, computed at query time from each activity's `fechaFin`:
+
+| Value | Meaning |
+| --- | --- |
+| `VERDE` | Up to date — no pending activities, or all pending activities are due more than 3 days from now. |
+| `AMARILLO` | At least one pending activity is due within the next 3 days (and none are overdue). |
+| `ROJO` | At least one pending activity is **overdue** (`fechaFin` already in the past). |
+
+Use the [`alertaActividad`](#query-parameters) query parameter to retrieve only leads whose `activityAlert` matches a given traffic-light state (`TODAS`, `POR_VENCER`, or `VENCIDAS`).

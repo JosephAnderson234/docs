@@ -1,0 +1,90 @@
+---
+title: "POST /auth/login — Start a Session"
+sidebarTitle: "POST /auth/login"
+description: "Authenticate with email and password. Returns a JWT access token and sets an httpOnly refresh token cookie valid for 7 days."
+---
+
+Use this endpoint to authenticate a user with their email address and password. On success, you receive a short-lived JWT access token in the response body and a long-lived `refreshToken` cookie is set automatically. Use the access token to authorize all subsequent requests to protected endpoints.
+
+## Endpoint
+
+```
+POST /auth/login
+```
+
+## Authentication
+
+None required.
+
+## Request Body
+
+<ParamField body="correo" type="string" required>
+  Email address of the user. Must be a valid email format.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Account password for the user.
+</ParamField>
+
+### Request Example
+
+```json
+{
+  "correo": "usuario@dominio.com",
+  "password": "mysecretpassword"
+}
+```
+
+## Response
+
+### `200 OK`
+
+```json
+{
+  "accessToken": "eyJhbGciOi...",
+  "accessTokenExpiresIn": 900
+}
+```
+
+<ResponseField name="accessToken" type="string">
+  A signed JWT. Include this on all subsequent requests to protected endpoints using the `Authorization: Bearer <token>` header.
+</ResponseField>
+
+<ResponseField name="accessTokenExpiresIn" type="number">
+  Number of seconds until the access token expires. Currently **900** (15 minutes). After expiry, use `POST /auth/refresh` to obtain a new token.
+</ResponseField>
+
+## Cookie
+
+In addition to the JSON body, the server sets an `httpOnly` cookie named `refreshToken` with the following attributes:
+
+| Attribute | Value |
+|---|---|
+| `httpOnly` | `true` |
+| `path` | `/auth/refresh` |
+| `sameSite` | `lax` |
+| `maxAge` | 7 days |
+| `secure` | `true` in production environments |
+
+The cookie is scoped to `path: /auth/refresh`, so your browser or HTTP client sends it **automatically** to `POST /auth/refresh`. You do not need to read, store, or attach the refresh token manually. The cookie is marked `Secure` in production environments.
+
+## Errors
+
+| Status | When |
+|---|---|
+| `400` | Invalid email format or missing required fields |
+| `401` | Wrong email or password |
+
+Error responses follow this format:
+
+```json
+{
+  "statusCode": 401,
+  "message": "No autorizado",
+  "error": "Unauthorized"
+}
+```
+
+<Warning>
+  The access token expires in **15 minutes**. Use [`POST /auth/refresh`](/api/auth/refresh) to renew it without re-entering credentials.
+</Warning>

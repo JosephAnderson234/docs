@@ -1,0 +1,109 @@
+---
+title: "In-App Notifications — Bell Inbox"
+sidebarTitle: "In-App Inbox"
+description: "List the authenticated user's in-app notifications (the bell inbox) and mark them as read. Includes the automatic daily alert for stalled open leads."
+---
+
+Read and update the **in-app inbox** (the bell icon) of the authenticated user. The inbox aggregates user-targeted events from across the CRM and includes an **automatic daily alert** for open leads that have had no status change in the last 30 days.
+
+**Authentication:** Bearer JWT required (`Authorization: Bearer <token>`). See [Authentication](/authentication) for how to obtain and pass the token.
+
+**OpenAPI tag:** `notifications`
+
+---
+
+## GET /notifications/in-app
+
+Return the in-app notifications for the currently authenticated user, most recent first.
+
+<Note>
+  **Automatic stalled-lead alert.** Every day at **09:00** the system generates an in-app notification for the owner of each open lead that has had **no status change in the last 30\+ days**. The alert is delivered to the user assigned as the lead's responsible.
+</Note>
+
+### Query parameters
+
+None.
+
+### Example request
+
+```bash
+curl -X GET \
+  'https://api.bioactiva.com/notifications/in-app' \
+  -H 'Authorization: Bearer <token>'
+```
+
+### Response — `200 OK`
+
+```json
+[
+  {
+    "id": 9012,
+    "titulo": "Lead sin movimiento",
+    "mensaje": "El lead ACME lleva 32 días sin cambio de estado.",
+    "estado": "NO_LEIDA",
+    "idLead": 217,
+    "idActividad": null,
+    "createdAt": "2026-06-09T09:00:00.000Z"
+  },
+  {
+    "id": 9011,
+    "titulo": "Actividad próxima",
+    "mensaje": "Reunión con ACME mañana a las 10:00.",
+    "estado": "LEIDA",
+    "idLead": 217,
+    "idActividad": 1024,
+    "createdAt": "2026-06-08T08:30:00.000Z"
+  }
+]
+```
+
+---
+
+## PATCH /notifications/in-app/:id/read
+
+Mark a single in-app notification as read. Only notifications belonging to the authenticated user can be updated.
+
+### Example request
+
+```bash
+curl -X PATCH \
+  'https://api.bioactiva.com/notifications/in-app/9012/read' \
+  -H 'Authorization: Bearer <token>'
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "id": 9012,
+  "titulo": "Lead sin movimiento",
+  "mensaje": "El lead ACME lleva 32 días sin cambio de estado.",
+  "estado": "LEIDA",
+  "idLead": 217,
+  "idActividad": null,
+  "createdAt": "2026-06-09T09:00:00.000Z"
+}
+```
+
+### Response field reference
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | number | In-app notification identifier. |
+| `titulo` | string | Short heading shown in the bell inbox. |
+| `mensaje` | string | Body text of the notification. |
+| `estado` | string | `NO_LEIDA` (unread) or `LEIDA` (read). |
+| `idLead` | number \| null | Lead the notification refers to, when applicable. |
+| `idActividad` | number \| null | Activity the notification refers to, when applicable. |
+| `createdAt` | ISO 8601 | When the notification was generated. |
+
+### Errors
+
+| Status | When |
+| --- | --- |
+| `400` | Invalid path parameter — for example, `:id` is not an integer. |
+| `401` | Missing or invalid JWT. See [Authentication](/authentication). |
+| `404` | Notification not found or does not belong to the authenticated user. |
+| `409` | Notification is already in the target state (e.g. already `LEIDA`). |
+
+See [Errors](/errors) for the full error response shape.

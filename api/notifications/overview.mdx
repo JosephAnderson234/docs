@@ -1,0 +1,414 @@
+---
+title: "Notificaciones (CU007) — Recordatorios y Seguimientos"
+sidebarTitle: "Reminders & Follow-ups"
+description: "Programa, consulta y cancela correos de recordatorio y seguimiento asociados a leads. Modelo basado en idLead con resolución automática de la actividad activa."
+---
+
+<Warning>
+  **Cambio de contrato (breaking):** los endpoints de creación ahora reciben **`idLead`** en lugar de `idActividad`. Además, **`idTemplate` pasó de obligatorio a opcional/nullable** tanto en recordatorios como en ambos correos del seguimiento.
+</Warning>
+
+<Warning>
+  **Breaking (recordatorios):** `POST /notifications/reminders` ya **no** acepta `fechaEnvio` (fecha absoluta). En su lugar recibe **`minutosAntes`** (entero `1–120`): minutos antes de que finalice la actividad en que se envía el recordatorio (máximo 2 horas antes).
+</Warning>
+
+<Warning>
+  **Breaking (Calendario, CU007):** el endpoint `POST /activities` ya **no** acepta `syncWithMicrosoft` ni `createTeamsMeeting`. El evento de Outlook/Teams **ya no se crea automáticamente** al registrar la actividad; ahora se crea **bajo demanda** con [`POST /activities/{id}/calendar-event`](/api/activities/overview#post-activities-id-calendar-event).
+</Warning>
+
+El módulo de Notificaciones permite **programar, consultar y cancelar** correos asociados al seguimiento de leads y actividades. Hay dos tipos: **Recordatorio** (un correo interno al encargado de la actividad) y **Seguimiento** (correo interno al encargado \+ correo externo al contacto del lead).
+
+**Modelo clave:** al crear una notificación se envía el **`idLead`**, no la actividad. El sistema resuelve automáticamente la **única actividad activa** del lead (regla de negocio: un lead tiene como máximo una actividad activa) y de ella obtiene la actividad, el encargado y la fecha fin. Los datos de actividad/encargado que muestre la interfaz son **solo informativos**.
+
+**Plantilla opcional:** se puede seleccionar una plantilla activa para precargar asunto y cuerpo, pero no es obligatoria. El asunto y el cuerpo siempre se envían como **copia editable** (vengan de una plantilla o escritos a mano); la plantilla original nunca se modifica.
+
+**Horario laboral:** los envíos se programan en la franja **\[09:00–18:00)**. Si la hora indicada cae fuera, se reprograma a las 09:00 del mismo día.
+
+Las notificaciones **no se reprograman**: para cambiar fecha, hora o plantilla, cancela la existente y crea una nueva.
+
+**Authentication:** Bearer JWT required (`Authorization: Bearer <token>`). See [Authentication](/authentication) for how to obtain and pass the token.
+
+**OpenAPI tag:** `notifications`
+
+---
+
+## POST /notifications/reminders — Crear recordatorio
+
+Programa un correo interno al encargado de la actividad activa del lead.
+
+### Body parameters
+
+<ParamField body="idLead" type="integer ≥ 1" required>
+  El servidor resuelve la actividad activa del lead.
+</ParamField>
+
+<ParamField body="minutosAntes" type="integer (1–120)" required>
+  Minutos antes de que finalice la actividad en que se envía el recordatorio. Rango permitido **`1–120`** (máximo 2 horas antes). El servidor calcula la fecha/hora de envío como `fechaFin de la actividad − minutosAntes`.
+</ParamField>
+
+<ParamField body="idTemplate" type="integer ≥ 1 | null">
+  **Opcional.** Si se omite o es `null`, no se valida plantilla.
+</ParamField>
+
+<ParamField body="asunto" type="string (1–255)" required>
+  Copia editable.
+</ParamField>
+
+<ParamField body="cuerpo" type="string" required>
+  Copia editable (HTML o texto). No vacío.
+</ParamField>
+
+### Ejemplo request (con plantilla)
+
+```json
+{
+  "idLead": 12,
+  "minutosAntes": 30,
+  "idTemplate": 5,
+  "asunto": "Recordatorio: actividad pendiente",
+  "cuerpo": "<p>Recuerda revisar la actividad asociada al lead.</p>"
+}
+```
+
+### Ejemplo request (sin plantilla)
+
+```json
+{
+  "idLead": 12,
+  "minutosAntes": 60,
+  "idTemplate": null,
+  "asunto": "Recordatorio: actividad pendiente",
+  "cuerpo": "Recuerda revisar la actividad asociada al lead."
+}
+```
+
+### Respuesta — `201 Created`
+
+Objeto `NotificationResponseDto` (ver [esquema](#esquema-notificationresponsedto)).
+
+```json
+{
+  "id": 101,
+  "tipo": "RECORDATORIO",
+  "estado": "PROGRAMADA",
+  "idActividad": 34,
+  "correoCliente": null,
+  "asuntoExterno": null,
+  "fechaEnvioExterno": null,
+  "enviadoExterno": false,
+  "createdAt": "2026-06-14T20:05:00.000Z"
+}
+```
+
+**Errores posibles:** `401` (sin token), `404` lead sin actividad activa, `409` notificación duplicada, `404` plantilla inexistente/inactiva, `400` `minutosAntes` fuera de `1–120`, `400` el envío calculado queda **en el pasado** porque la actividad finaliza demasiado pronto. Ver [tabla de errores](#errores).
+
+---
+
+## POST /notifications/follow-ups — Crear seguimiento
+
+Programa un **seguimiento** compuesto por **1 a 3 instancias escalonadas**. Cada instancia agrupa dos correos: uno **interno** al encargado de la actividad y uno **externo** al contacto del lead. Todas las instancias se envían al **mismo destinatario externo** (`correoCliente`).
+
+### Body parameters
+
+<ParamField body="idLead" type="integer ≥ 1" required>
+  El servidor resuelve la **actividad activa única** del lead.
+</ParamField>
+
+<ParamField body="correoCliente" type="string (email)" required>
+  Destinatario del cliente para **todas** las instancias. Debe ser uno de los correos del contacto del lead.
+</ParamField>
+
+<ParamField body="instancias" type="array (1–3 elementos)" required>
+  Instancias escalonadas del seguimiento. Cada elemento es un objeto `{ internal, external }` con los siguientes campos:
+
+  | Campo | Tipo | Obligatorio | Notas |
+  | --- | --- | --- | --- |
+  | `internal.fechaEnvio` | string (ISO 8601) | sí | Aplica horario laboral `[09:00–18:00)` |
+  | `internal.idTemplate` | integer ≥ 1 \| null | **no** | Si se omite, asunto y cuerpo van escritos a mano |
+  | `internal.asunto` | string (1–255) | sí |  |
+  | `internal.cuerpo` | string (HTML) | sí |  |
+  | `external.fechaEnvio` | string (ISO 8601) | sí | **Debe ser posterior a `internal.fechaEnvio`** |
+  | `external.idTemplate` | integer ≥ 1 \| null | **no** | Si se omite, asunto y cuerpo van escritos a mano |
+  | `external.asunto` | string (1–255) | sí |  |
+  | `external.cuerpo` | string (HTML) | sí |  |
+</ParamField>
+
+<Note>
+  **Reglas de validación**
+
+  - Entre **1 y 3 instancias**.
+  - En cada instancia, el correo **interno** (al responsable) debe ser **anterior** al **externo** (al cliente).
+  - **Todas** las fechas (internas y externas) deben caer **antes de la fecha de fin** de la actividad activa del lead.
+  - Las instancias van **en orden** y **no se solapan**: el externo de la instancia _i_ debe ser **anterior** al interno de la instancia _i\+1_ (`external[i].fechaEnvio < internal[i+1].fechaEnvio`).
+  - Las fechas fuera del horario laboral `[09:00–18:00)` se **reprograman a las 09:00** del mismo día.
+</Note>
+
+### Ejemplo request
+
+```json
+{
+  "idLead": 12,
+  "correoCliente": "maria.torres@cliente.com",
+  "instancias": [
+    {
+      "internal": {
+        "fechaEnvio": "2026-06-20T14:00:00.000Z",
+        "idTemplate": 5,
+        "asunto": "Revisión interna de seguimiento #1",
+        "cuerpo": "<p>Revisa la propuesta enviada al lead.</p>"
+      },
+      "external": {
+        "fechaEnvio": "2026-06-21T16:00:00.000Z",
+        "idTemplate": null,
+        "asunto": "Seguimiento a su propuesta",
+        "cuerpo": "<p>Estimada María, damos seguimiento a la propuesta enviada.</p>"
+      }
+    },
+    {
+      "internal": {
+        "fechaEnvio": "2026-06-24T10:00:00.000Z",
+        "idTemplate": null,
+        "asunto": "Revisión interna de seguimiento #2",
+        "cuerpo": "<p>Segundo recordatorio interno.</p>"
+      },
+      "external": {
+        "fechaEnvio": "2026-06-24T15:00:00.000Z",
+        "idTemplate": 8,
+        "asunto": "¿Pudo revisar nuestra propuesta?",
+        "cuerpo": "<p>Estimada María, quería confirmar si tuvo oportunidad de revisar la propuesta.</p>"
+      }
+    }
+  ]
+}
+```
+
+### Respuesta — `201 Created`
+
+`NotificationResponseDto` con `tipo: "SEGUIMIENTO"` y el array `instancias` poblado.
+
+```json
+{
+  "id": 102,
+  "tipo": "SEGUIMIENTO",
+  "estado": "PROGRAMADA",
+  "idActividad": 34,
+  "idLead": 12,
+  "idResponsable": 7,
+  "correoCliente": "maria.torres@cliente.com",
+  "instancias": [
+    {
+      "id": 501,
+      "orden": 1,
+      "asuntoInterno": "Revisión interna de seguimiento #1",
+      "fechaEnvioInterno": "2026-06-20T14:00:00.000Z",
+      "enviadoInterno": false,
+      "asuntoExterno": "Seguimiento a su propuesta",
+      "fechaEnvioExterno": "2026-06-21T16:00:00.000Z",
+      "enviadoExterno": false
+    },
+    {
+      "id": 502,
+      "orden": 2,
+      "asuntoInterno": "Revisión interna de seguimiento #2",
+      "fechaEnvioInterno": "2026-06-24T10:00:00.000Z",
+      "enviadoInterno": false,
+      "asuntoExterno": "¿Pudo revisar nuestra propuesta?",
+      "fechaEnvioExterno": "2026-06-24T15:00:00.000Z",
+      "enviadoExterno": false
+    }
+  ],
+  "createdAt": "2026-06-14T20:06:00.000Z"
+}
+```
+
+### Errores
+
+- **`409 Conflict`** si el lead **ya tiene un seguimiento programado**.
+- **`404 NotFound`** si el lead **no tiene actividad activa**.
+- **`400 Validation`** si `correoCliente` **no pertenece** a los contactos del lead.
+- **`400 Validation`** si las fechas **no cumplen el orden/rango**: instancias fuera de `1–3`, interno ≥ externo en una instancia, externo\[i\] ≥ interno\[i\+1\], o cualquier fecha en/después de la fecha de fin de la actividad.
+
+Ver [tabla de errores](#errores) para el envelope completo.
+
+---
+
+## GET /notifications — Listar notificaciones
+
+Lista las notificaciones en **Programadas** y **Vencidas**. Las canceladas **nunca** se devuelven.
+
+### Query parameters (todos opcionales)
+
+<ParamField query="estado" type="string">
+  `PROGRAMADA` | `VENCIDA`. Solo estos dos valores; otro → `400`.
+</ParamField>
+
+<ParamField query="idLead" type="integer ≥ 1">
+  Filtra por lead.
+</ParamField>
+
+<ParamField query="idResponsable" type="integer ≥ 1">
+  Filtra por encargado.
+</ParamField>
+
+### Respuesta — `200 OK`
+
+Array de `NotificationResponseDto`, ordenado por `fechaEnvioInterno` ascendente.
+
+```json
+[
+  {
+    "id": 101,
+    "tipo": "RECORDATORIO",
+    "estado": "PROGRAMADA",
+    "idActividad": 34,
+    "idLead": 12,
+    "idResponsable": 7,
+    "asuntoInterno": "Recordatorio: actividad pendiente",
+    "fechaEnvioInterno": "2026-06-20T14:00:00.000Z",
+    "enviadoInterno": false,
+    "correoCliente": null,
+    "asuntoExterno": null,
+    "fechaEnvioExterno": null,
+    "enviadoExterno": false,
+    "createdAt": "2026-06-14T20:05:00.000Z"
+  }
+]
+```
+
+---
+
+## DELETE /notifications/:id — Cancelar notificación
+
+Cancela una notificación **PROGRAMADA** (anula sus envíos). Solo aplica a notificaciones programadas.
+
+- **Path param:** `id` (integer).
+- **Respuesta `200`:** `NotificationResponseDto` con `estado: "CANCELADA"`.
+- **Error `409`** (`kind: Conflict`) si la notificación no está en estado `PROGRAMADA`.
+
+### Ejemplo request
+
+```bash
+curl -X DELETE \
+  'https://api.bioactiva.com/notifications/101' \
+  -H 'Authorization: Bearer <token>'
+```
+
+---
+
+## GET /notifications/templates — Plantillas activas (selector)
+
+Devuelve las plantillas activas para el selector del formulario. La interfaz usa `asunto` y `cuerpo` para **precargar** el correo cuando el usuario elige una plantilla.
+
+### Respuesta — `200 OK`
+
+Array de objetos con los siguientes campos:
+
+| Campo | Tipo | Notas |
+| --- | --- | --- |
+| `id` | integer |  |
+| `nombre` | string |  |
+| `asunto` | string |  |
+| `cuerpo` | string |  |
+| `activo` | boolean | Siempre `true` aquí |
+
+```json
+[
+  { "id": 5, "nombre": "Recordatorio de actividad", "asunto": "Actividad pendiente", "cuerpo": "<p>...</p>", "activo": true }
+]
+```
+
+Para CRUD completo de plantillas (incluyendo inactivas), ver [Email Templates (CRUD)](/api/notifications/templates).
+
+---
+
+## GET /notifications/in-app — Bandeja in-app del usuario
+
+Notificaciones in-app (campana) del usuario autenticado. Hoy el único origen es la **alerta automática de leads con más de 30 días sin cambio de estado**.
+
+Ver [In-App Inbox](/api/notifications/in-app) para detalles, ejemplos y el endpoint `PATCH /notifications/in-app/:id/read` para marcar como leídas.
+
+### Respuesta — `200 OK`
+
+Array de objetos:
+
+| Campo | Tipo | Notas |
+| --- | --- | --- |
+| `id` | integer |  |
+| `titulo` | string |  |
+| `mensaje` | string |  |
+| `estado` | `NO_LEIDA` \| `LEIDA` |  |
+| `idLead` | integer \| null |  |
+| `idActividad` | integer \| null |  |
+| `createdAt` | string (ISO 8601) |  |
+
+---
+
+## PATCH /notifications/in-app/:id/read — Marcar como leída
+
+- **Path param:** `id` (integer).
+- **Respuesta `200`:** `InAppNotificationResponseDto` con `estado: "LEIDA"`.
+- **Error `404`** si la notificación no existe o no pertenece al usuario.
+
+Ver [In-App Inbox](/api/notifications/in-app) para el ejemplo completo.
+
+---
+
+## Esquema `NotificationResponseDto`
+
+| Campo | Tipo | Notas |
+| --- | --- | --- |
+| `id` | integer |  |
+| `tipo` | `RECORDATORIO` \| `SEGUIMIENTO` |  |
+| `estado` | `PROGRAMADA` \| `VENCIDA` \| `CANCELADA` |  |
+| `idActividad` | integer | Actividad activa resuelta por el servidor |
+| `idLead` | integer |  |
+| `idResponsable` | integer | Encargado (automático) |
+| `asuntoInterno` | string \| null | Solo en `RECORDATORIO` |
+| `fechaEnvioInterno` | string (ISO 8601) \| null | Solo en `RECORDATORIO` |
+| `enviadoInterno` | boolean | Solo en `RECORDATORIO` |
+| `correoCliente` | string \| null | Solo en `SEGUIMIENTO`. Mismo destinatario para todas las instancias. |
+| `instancias` | `Array<FollowUpInstance>` \| null | Solo en `SEGUIMIENTO`. **1–3** elementos. |
+| `createdAt` | string (ISO 8601) |  |
+
+#### `FollowUpInstance` (solo en `SEGUIMIENTO`)
+
+| Campo | Tipo | Notas |
+| --- | --- | --- |
+| `id` | integer | ID de la instancia |
+| `orden` | integer (1–3) | Posición de la instancia dentro del seguimiento |
+| `asuntoInterno` | string |  |
+| `fechaEnvioInterno` | string (ISO 8601) |  |
+| `enviadoInterno` | boolean |  |
+| `asuntoExterno` | string |  |
+| `fechaEnvioExterno` | string (ISO 8601) |  |
+| `enviadoExterno` | boolean |  |
+
+<Note>
+  La respuesta **no incluye el cuerpo** de los correos, solo el asunto.
+</Note>
+
+---
+
+## Errores
+
+Todas las respuestas de error usan el envelope:
+
+```json
+{
+  "statusCode": 404,
+  "error": "LeadHasNoActiveActivityException",
+  "kind": "NotFound",
+  "message": "El lead con id 12 no tiene una actividad activa",
+  "path": "/notifications/reminders",
+  "timestamp": "2026-06-14T20:05:00.000Z"
+}
+```
+
+| statusCode | kind | Cuándo |
+| --- | --- | --- |
+| `400` | `Validation` | Body inválido, fecha fuera de rango, externo no posterior al interno, `correoCliente` no asociado al lead, `minutosAntes` fuera de `1–120`, o el envío calculado del recordatorio queda en el pasado |
+| `401` | `Unauthorized` | Falta o es inválido el token Bearer |
+| `404` | `NotFound` | **Lead sin actividad activa** (nuevo), o `idTemplate` enviado pero plantilla inexistente/inactiva |
+| `409` | `Conflict` | Ya existe una notificación `PROGRAMADA` para esa actividad, o se cancela una no programada |
+
+Ver [Errors](/errors) para el formato completo del envelope.

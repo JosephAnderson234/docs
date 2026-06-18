@@ -1,0 +1,90 @@
+---
+title: "PATCH /users/{id}/role — Change a User's Role"
+sidebarTitle: "PATCH /users/{id}/role"
+description: "Assign a new role (ADMINISTRADOR or TRABAJADOR) to another user. Administrator-only. Closes the affected user's active session."
+---
+
+Use this endpoint to change another user's role. Only administrators can call it. Administrators **cannot change their own role** — doing so returns `409 Conflict`.
+
+<Warning>
+  Changing a user's role **closes their currently active session**. The affected user must log in again for the new role to take effect.
+</Warning>
+
+## Endpoint
+
+```text
+PATCH /users/{id}/role
+```
+
+## Authentication
+
+`Authorization: Bearer <accessToken>` — **required**. The caller must hold the `ADMINISTRADOR` role. Requests from `TRABAJADOR` accounts are rejected with `403 Forbidden`.
+
+## Path Parameters
+
+<ParamField path="id" type="number" required>
+  Numeric ID of the user whose role you want to change.
+</ParamField>
+
+## Request Body
+
+<ParamField body="rol" type="enum" required>
+  The new role to assign. Accepted values: `ADMINISTRADOR`, `TRABAJADOR`.
+</ParamField>
+
+### Request example
+
+```http
+PATCH /users/42/role
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+```
+
+```json
+{
+  "rol": "ADMINISTRADOR"
+}
+```
+
+## Response
+
+### `200 OK`
+
+Returns the updated user as a `UserResponseDto`.
+
+```json
+{
+  "id": 42,
+  "nombres": "María",
+  "apellidos": "García",
+  "correo": "maria.garcia@empresa.com",
+  "rol": "ADMINISTRADOR",
+  "estado": "ACTIVO",
+  "fechaRegistro": "2026-01-15T10:30:00.000Z"
+}
+```
+
+<Note>
+  As soon as this call succeeds, the affected user's existing access token and refresh token are invalidated. Their next request will receive `401 Unauthorized` and they must sign in again.
+</Note>
+
+## Errors
+
+| Status | `kind` | When |
+| --- | --- | --- |
+| `400 Bad Request` | `validation` | `rol` is missing or is not one of the accepted enum values. |
+| `401 Unauthorized` | `unauthorized` | No token provided, the token has expired, is invalid, or belongs to a session that was replaced by a newer login. |
+| `403 Forbidden` | `forbidden` | The caller does not hold the `ADMINISTRADOR` role. |
+| `404 Not Found` | `not_found` | No user exists with the given `id`. |
+| `409 Conflict` | `conflict` | The caller is trying to change **their own** role. Administrators cannot demote or re-assign themselves through this endpoint. |
+
+```json
+{
+  "statusCode": 409,
+  "error": "Conflict",
+  "kind": "conflict",
+  "message": "Un administrador no puede cambiar su propio rol.",
+  "path": "/users/7/role",
+  "timestamp": "2026-06-10T10:30:00.000Z"
+}
+```

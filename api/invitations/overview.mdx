@@ -1,0 +1,295 @@
+---
+title: "Invitations API — Onboard New Users via Email"
+sidebarTitle: "Invitations"
+description: "Create, list, and revoke user invitations. Invited users accept via a token-based link and are immediately authenticated upon joining."
+---
+
+The invitation system lets administrators invite new users by email without creating accounts upfront. Each invitation is single-use and expires automatically. When an invited user accepts, their account is created and they receive a session immediately, with no separate login step required.
+
+<Note>
+  **Re-inviting cancelled or expired invitations is supported.** If a previous invitation for the same email was `CANCELADA` or expired, calling `POST /invitations` again succeeds: the backend reuses the provisional user record instead of creating a new one (no unique-email conflict).
+
+  Re-inviting an email that already belongs to a **fully-registered** user (one who has set a password and is `ACTIVO` or `SUSPENDIDO`) is **not** allowed and returns `409 UserAlreadyRegisteredException`.
+</Note>
+
+---
+
+## POST /invitations — Create an Invitation
+
+Generate a new invitation for a given email address and role. The system sends the invitation link to the specified address.
+
+### Authentication
+
+JWT required. Role: `ADMINISTRADOR`.
+
+### Request Body
+
+```json
+{
+  "correo": "nuevo.usuario@empresa.com",
+  "rol": "TRABAJADOR"
+}
+```
+
+<ParamField body="correo" type="string" required>
+  The email address to invite. Must be a valid email format and belong to an allowed domain.
+</ParamField>
+
+<ParamField body="rol" type="string" required>
+  The role to assign to the new user. Accepted values: `ADMINISTRADOR`, `TRABAJADOR`.
+</ParamField>
+
+### Response — 201 Created
+
+```json
+{ "ok": true }
+```
+
+The invitation has been created (or, for cancelled / expired invitations on the same email, refreshed in place) and the email has been queued for delivery.
+
+### Behavior — re-inviting an email
+
+| Previous state for that email | Result of `POST /invitations` |
+| --- | --- |
+| No previous record | New provisional user \+ new invitation created. |
+| Live (`PENDIENTE`) invitation still valid | `400 Bad Request` — _"Ya existe una invitación pendiente"_. |
+| Previous invitation was `CANCELADA` or `EXPIRADA` | **Succeeds.** Backend reuses the existing provisional user and issues a fresh invitation (no unique-email violation). |
+| User already completed registration (`ACTIVO` or `SUSPENDIDO`, has a password) | `409 Conflict` — `UserAlreadyRegisteredException`. |
+
+### Error Responses
+
+| Status | `error` / `kind` | When |
+| --- | --- | --- |
+| `400 Bad Request` | `validation` | Body failed DTO validation. |
+| `400 Bad Request` | `validation` — _"Ya existe una invitación pendiente"_ | A live (non-cancelled, non-expired) invitation already exists for this email. |
+| `400 Bad Request` | `validation` — _"Dominio no permitido"_ | The email domain is not on the allow-list. |
+| `401 Unauthorized` | — | No valid JWT provided. |
+| `403 Forbidden` | — | Authenticated user is not an administrator. |
+| `409 Conflict` | `UserAlreadyRegisteredException` (`conflict`) | The email belongs to a user who **already completed registration** (has a password), whether they are `ACTIVO` or `SUSPENDIDO`. Re-inviting these accounts is not allowed. **New in this release.** |
+
+**`409 Conflict`** — email already belongs to a registered user:
+
+```json
+{
+  "statusCode": 409,
+  "error": "UserAlreadyRegisteredException",
+  "kind": "conflict",
+  "message": "Ya existe un usuario registrado con este correo",
+  "path": "/invitations",
+  "timestamp": "2026-06-04T10:30:00.000Z"
+}
+```
+
+---
+
+## GET /invitations — List Invitations
+
+Retrieve a paginated list of all invitations, optionally filtered by email or token status.
+
+### Authentication
+
+JWT required. Role: `ADMINISTRADOR`.
+
+### Query Parameters
+
+<ParamField query="page" default="1" type="number">
+  Page number to retrieve.
+</ParamField>
+
+<ParamField query="limit" default="10" type="number">
+  Number of results per page.
+</ParamField>
+
+<ParamField query="term" type="string">
+  Search filter applied to the invitation's email address (partial, case-insensitive match).
+</ParamField>
+
+<ParamField query="estado" type="number">
+  Filter by token status using the `TokenStatus` enum value (e.g. pending, accepted, expired, revoked).
+</ParamField>
+
+### Response — 200 OK
+
+Returns a paginated list of invitation records. Each record includes the invitation's current status metadata (whether it is pending, accepted, expired, or revoked).
+
+### Error Responses
+
+| Status | When |
+| --- | --- |
+| `401 Unauthorized` | No valid JWT provided. |
+| `403 Forbidden` | Authenticated user is not an administrator. |
+
+---
+
+## GET /invitations/info/:token — Check Invitation Status
+
+Validate a token and retrieve public, obfuscated information about the invitation before showing a registration form. No authentication is required.
+
+### Authentication
+
+None. This endpoint is public.
+
+### Path Parameter
+
+<ParamField path="token" type="string" required>
+  The invitation token received in the email link.
+</ParamField>
+
+### Response — 200 OK
+
+```json
+{
+  "correo": "n***o@empresa.com",
+  "expired": false,
+  "accepted": false
+}
+```
+
+<ResponseField name="correo" type="string">
+  The email address associated with the invitation, masked for privacy. Only the first character and the domain are revealed.
+</ResponseField>
+
+<ResponseField name="expired" type="boolean">
+  `true` if the invitation has passed its expiry date and can no longer be accepted.
+</ResponseField>
+
+<ResponseField name="accepted" type="boolean">
+  `true` if the invitation has already been used to create an account.
+</ResponseField>
+
+<Note>
+  Use this endpoint to pre-validate a token before rendering the registration form to the user. If `expired` or `accepted` is `true`, you should display an appropriate error message instead of the form.
+</Note>
+
+---
+
+## POST /invitations/accept — Accept an Invitation
+
+Complete the registration process for an invited user. This endpoint creates the account, marks the invitation as consumed, and returns a live session — all in a single request.
+
+### Authentication
+
+None. This endpoint is public.
+
+### Request Body
+
+```json
+{
+  "token": "550e8400-e29b-41d4-a716-446655440000",
+  "password": "mysecretpassword",
+  "confirmPassword": "mysecretpassword",
+  "nombres": "María",
+  "apellidos": "López"
+}
+```
+
+<ParamField body="token" type="string" required>
+  The invitation token from the email link.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  The password you want to set for the new account.
+</ParamField>
+
+<ParamField body="confirmPassword" type="string" required>
+  Must exactly match `password`. The server rejects the request if the two values differ.
+</ParamField>
+
+<ParamField body="nombres" type="string" required>
+  Your first name(s).
+</ParamField>
+
+<ParamField body="apellidos" type="string" required>
+  Your last name(s).
+</ParamField>
+
+### Response — 200 OK
+
+```json
+{
+  "accessToken": "eyJhbGciOi...",
+  "accessTokenExpiresIn": 900
+}
+```
+
+<ResponseField name="accessToken" type="string">
+  A short-lived JWT you can use immediately to call protected API endpoints. Expires in `accessTokenExpiresIn` seconds.
+</ResponseField>
+
+<ResponseField name="accessTokenExpiresIn" type="number">
+  The number of seconds until `accessToken` expires (default: `900`, i.e. 15 minutes).
+</ResponseField>
+
+The server also sets an `httpOnly` cookie named `refreshToken` with the following attributes:
+
+| Attribute | Value |
+| --- | --- |
+| `httpOnly` | `true` |
+| `sameSite` | `lax` |
+| `path` | `/auth/refresh` |
+| `secure` | `true` in production |
+| `maxAge` | 7 days |
+
+<Tip>
+  You do not need to call `POST /auth/login` after accepting an invitation — the response already contains your `accessToken` and the `refreshToken` cookie is set automatically. You are logged in immediately.
+</Tip>
+
+### Error Responses
+
+| Status | When |
+| --- | --- |
+| `400 Bad Request` | `password` and `confirmPassword` do not match. |
+| `400 Bad Request` | The token is invalid, has already been used, or has expired. |
+| `400 Bad Request` | DTO validation failed (e.g. a required field is missing). |
+
+---
+
+## DELETE /invitations/:id — Revoke an Invitation
+
+Cancel a pending invitation before it is accepted. The invitation is marked as `CANCELADA` and can no longer be used.
+
+### Authentication
+
+JWT required. Role: `ADMINISTRADOR`.
+
+### Path Parameter
+
+<ParamField path="id" type="number" required>
+  The numeric ID of the invitation to revoke.
+</ParamField>
+
+### Response — 200 OK
+
+Returns the updated invitation object reflecting the cancelled status.
+
+<Warning>
+  **Side effect on the provisional user.** When an invitation is cancelled — and likewise **when it expires automatically** — the provisional user record associated with it (the placeholder user that was created when the invitation was issued and that never completed registration) is transitioned to state `SUSPENDIDO`.
+
+  As a result, the same email will subsequently appear in `GET /users` as a **`SUSPENDIDO`** user instead of `PENDIENTE`. This is what enables re-inviting cancelled or expired invitations (see [behavior table above](#behavior--re-inviting-an-email)) without violating the unique-email constraint.
+
+  If your user list UI should hide these provisional `SUSPENDIDO` records, coordinate the filter with the backend team.
+</Warning>
+
+### Error Responses
+
+| Status | When |
+| --- | --- |
+| `401 Unauthorized` | No valid JWT provided. |
+| `403 Forbidden` | Authenticated user is not an administrator. |
+| `400 Bad Request` | `id` is not a valid number, or no invitation exists with that ID. |
+
+---
+
+## Endpoint Summary
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `POST` | `/invitations` | JWT · Admin | Create and send a new invitation |
+| `GET` | `/invitations` | JWT · Admin | List all invitations with filters |
+| `GET` | `/invitations/info/:token` | Public | Check token status (obfuscated) |
+| `POST` | `/invitations/accept` | Public | Accept invitation and create account |
+| `DELETE` | `/invitations/:id` | JWT · Admin | Revoke a pending invitation |
+
+<Note>
+  Invitations expire automatically after a set period. Once expired, the token cannot be used to create an account.
+</Note>

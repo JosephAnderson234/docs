@@ -1,0 +1,108 @@
+---
+title: "assignable.mdx"
+sidebarTitle: "GET /users/assignable"
+description: 'Retrieve all enabled users to populate assignment selectors (e.g. the "Encargado" field on Leads). Available to any authenticated user, regardless of role.'
+---
+
+Use this endpoint to obtain the full list of users in **Habilitado** state, intended to populate assignment selectors in the UI — for example, the **Encargado** field when creating or editing a Lead.
+
+<Info>
+  **No confundir con `GET /users`.** `GET /users` es el **listado de gestión**: está paginado, acepta filtros (`search`, `role`, `estado`) y aplica visibilidad por rol (un `TRABAJADOR` solo ve a otros trabajadores). `GET /users/assignable` es específico para **selectores de asignación**: devuelve a **todos** los usuarios habilitados, sin paginar, e incluye el `correo` de cada uno para que el frontend pueda mostrarlo en el dropdown. No utilice `GET /users` para poblar selectores de asignación.
+</Info>
+
+## Endpoint
+
+```text
+GET /users/assignable
+```
+
+## Authentication
+
+All requests must include a valid JWT in the `Authorization` header.
+
+### Visibility by role
+
+- **`ADMINISTRADOR`** — ve a **todos** los usuarios habilitados.
+- **`TRABAJADOR`** — ve **la misma lista**: todos los usuarios habilitados.
+
+A diferencia de `GET /users`, este endpoint **no restringe la visibilidad por rol**, ya que su objetivo es permitir que cualquier usuario pueda asignar trabajo a cualquier otro usuario habilitado.
+
+## Query Parameters
+
+This endpoint does **not** accept query parameters. The response is **not paginated** and always returns every enabled user, ordered alphabetically by name.
+
+## Example Request
+
+```http
+GET /users/assignable
+Authorization: Bearer <token>
+```
+
+## Response — 200 OK
+
+```json
+[
+  {
+    "id": 1,
+    "nombres": "Juan",
+    "apellidos": "Pérez",
+    "correo": "juan@example.com",
+    "rol": "ADMINISTRADOR"
+  },
+  {
+    "id": 2,
+    "nombres": "María",
+    "apellidos": "García",
+    "correo": "maria@example.com",
+    "rol": "TRABAJADOR"
+  }
+]
+```
+
+### Response Fields
+
+<ResponseField name="[]" type="array">
+  Array of enabled user objects, ordered by name.
+
+  <Expandable title="item properties">
+    <ResponseField name="[].id" type="number">
+      Unique numeric identifier for the user.
+    </ResponseField>
+
+    <ResponseField name="[].nombres" type="string">
+      First name(s) of the user.
+    </ResponseField>
+
+    <ResponseField name="[].apellidos" type="string">
+      Last name(s) of the user.
+    </ResponseField>
+
+    <ResponseField name="[].correo" type="string">
+      Email address associated with the account.
+    </ResponseField>
+
+    <ResponseField name="[].rol" type="string">
+      Role assigned to the user. One of `ADMINISTRADOR` or `TRABAJADOR`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Response Field Reference
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `[].id` | number | User ID |
+| `[].nombres` | string | First name(s) |
+| `[].apellidos` | string | Last name(s) |
+| `[].correo` | string | Email address |
+| `[].rol` | string | `ADMINISTRADOR` or `TRABAJADOR` |
+
+<Note>
+  Solo se incluyen usuarios en estado **Habilitado**. Usuarios `PENDIENTE` o `SUSPENDIDO` se excluyen del resultado. El campo `password` nunca se devuelve. La respuesta no incluye metadatos de paginación porque el endpoint no está paginado.
+</Note>
+
+## Error Responses
+
+| Status | When |
+| --- | --- |
+| `401 Unauthorized` | No valid JWT was provided, or the token has expired. |

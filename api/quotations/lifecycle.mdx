@@ -1,0 +1,103 @@
+---
+title: "Quotation Lifecycle — Send, Accept, and Reject Proposals"
+sidebarTitle: "Lifecycle"
+description: "Advance a quotation through its lifecycle: send it to the client, accept the deal, or reject it. Accepting or rejecting automatically closes the linked lead."
+---
+
+Three dedicated endpoints manage the quotation lifecycle. You use them to move a quotation from its initial `PENDIENTE` state through to a final outcome. Crucially, **accepting or rejecting a quotation also closes the linked lead in the same atomic transaction** — if the database write fails for any reason, neither the quotation nor the lead will change state.
+
+---
+
+## State machine
+
+```
+PENDIENTE
+  └── /send → ENVIADA
+        ├── /accept → ACEPTADA (lead → CIERRE_CON_VENTA)
+        └── /reject → RECHAZADA (lead → CIERRE_SIN_VENTA)
+PENDIENTE
+  ├── /accept → ACEPTADA (lead → CIERRE_CON_VENTA)
+  └── /reject → RECHAZADA (lead → CIERRE_SIN_VENTA)
+```
+
+`ACEPTADA` and `RECHAZADA` are **terminal states**. Once a quotation reaches either state, no further edits or status transitions are allowed.
+
+---
+
+## PATCH /quotations/:id/send — Mark as sent
+
+Sets the quotation status to `ENVIADA`. Only allowed when the quotation is currently in `PENDIENTE`.
+
+**Authentication**: JWT required.
+
+**Request**: No body required.
+
+**Response `200 OK`** — Updated quotation object.
+
+**Errors**
+
+| Status | When |
+|---|---|
+| 400 | Quotation is not in `PENDIENTE` state |
+| 404 | Quotation not found |
+
+---
+
+## PATCH /quotations/:id/accept — Accept the quotation
+
+Sets the quotation to `ACEPTADA` and simultaneously transitions the linked lead to `CIERRE_CON_VENTA`. Allowed from either `PENDIENTE` or `ENVIADA`.
+
+**Authentication**: JWT required.
+
+**Request**: No body required.
+
+**Response `200 OK`** — Updated quotation object.
+
+**Errors**
+
+| Status | When |
+|---|---|
+| 400 | Quotation is not in `PENDIENTE` or `ENVIADA` |
+| 404 | Quotation or lead not found |
+| 409 | Two requests tried to finalize the same quotation at the same time — one succeeded and this one was rejected |
+
+<Warning>
+  Accepting a quotation closes the linked lead atomically. If you receive a `409 Conflict`, it means two requests raced to change the quotation state simultaneously. Fetch the current quotation state with `GET /quotations/:id` and verify whether it was already accepted before deciding whether to retry.
+</Warning>
+
+---
+
+## PATCH /quotations/:id/reject — Reject the quotation
+
+Sets the quotation to `RECHAZADA` and simultaneously transitions the linked lead to `CIERRE_SIN_VENTA`. Allowed from either `PENDIENTE` or `ENVIADA`.
+
+**Authentication**: JWT required.
+
+**Request**: No body required.
+
+**Response `200 OK`** — Updated quotation object.
+
+**Errors**
+
+| Status | When |
+|---|---|
+| 400 | Quotation is not in `PENDIENTE` or `ENVIADA` |
+| 404 | Quotation or lead not found |
+| 409 | Two requests tried to finalize the same quotation at the same time — one succeeded and this one was rejected |
+
+---
+
+## Handling 409 Conflict
+
+A `409 Conflict` response means two requests attempted to change the quotation state at the same time. If two requests try to finalize the same quotation simultaneously, one will succeed and the other will receive a `409 Conflict`. This protects against double-processing — for example, preventing a quotation from being both accepted and rejected at the same time.
+
+To recover:
+
+1. Call `GET /quotations/:id` to retrieve the current state of the quotation.
+2. Check whether the desired outcome has already been applied (e.g., the quotation is already `ACEPTADA`).
+3. If the state is already what you wanted, treat the operation as successful and move on.
+4. If the state is different from what you expected, evaluate the current state and decide whether to retry or surface an error to the user.
+
+<Tip>
+  Build your integration to be idempotent around lifecycle transitions. Before calling `/accept` or `/reject`, check the current `estado` on the quotation — if it is already terminal, skip the call entirely.
+</Tip>

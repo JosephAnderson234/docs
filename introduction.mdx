@@ -1,0 +1,125 @@
+---
+title: "Bioactiva CRM API: Manage Your Full Sales Pipeline"
+sidebarTitle: "Introduction"
+description: "Bioactiva CRM API is a REST interface for managing leads, contacts, organizations, activities, and quotations with Microsoft 365 integration."
+---
+
+The Bioactiva CRM API is a RESTful API that powers the full commercial lifecycle of a sales team. You can use it to manage leads through their pipeline stages, track activities such as meetings and calls, issue and accept quotations, maintain contacts and the organizations they belong to, and connect user calendars with Microsoft 365 (Outlook and Teams). The API is intended for CRM front-end applications, internal tooling, and integration scripts operated by sales staff and administrators.
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/authentication">
+    Obtain a JWT access token, refresh it automatically, reset passwords, and accept invitations.
+  </Card>
+  <Card title="Leads" icon="funnel" href="/concepts/leads">
+    Create and manage sales opportunities through the full prospecting-to-close pipeline.
+  </Card>
+  <Card title="Activities" icon="calendar-days" href="/concepts/activities">
+    Log meetings, calls, and emails against a lead — with optional Outlook and Teams sync.
+  </Card>
+  <Card title="Quotations" icon="file-invoice-dollar" href="/concepts/quotations">
+    Draft, send, accept, and reject commercial proposals tied to leads.
+  </Card>
+  <Card title="Organizations" icon="building" href="/concepts/organizations">
+    Register and query companies, including real-time SUNAT RUC lookups.
+  </Card>
+  <Card title="Contacts" icon="address-book" href="/concepts/contacts">
+    Manage individuals associated with organizations, including multiple email addresses.
+  </Card>
+</CardGroup>
+
+---
+
+## Base URL
+
+All requests are sent to the API's base URL. The exact host and port depend on your deployment environment — your infrastructure team will supply the correct value for each environment (local, staging, production).
+
+```
+https://<your-api-host>
+```
+
+<Tip>
+  If you are running a local instance, the default base URL is typically `http://localhost:3000`. Contact your administrator for the correct base URL in staging or production.
+</Tip>
+
+---
+
+## Request format
+
+Every request that includes a body must set the content type to JSON:
+
+```http
+Content-Type: application/json
+```
+
+**Dates** — all date and datetime values are expressed as [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) strings in UTC, for example `"2026-06-01T10:00:00.000Z"`. The API rejects non-conforming date strings with a `400 Bad Request`.
+
+**Numeric strings** — some decimal fields (for example, quotation `monto`) are sent and returned as numeric strings (`"5000.00"`) to preserve precision. Check the field-level documentation for each resource.
+
+---
+
+## Response format
+
+### List endpoints
+
+All paginated list endpoints return a consistent envelope:
+
+```json
+{
+  "data": [ /* array of resource objects */ ],
+  "meta": {
+    "page": 1,
+    "limit": 10,
+    "total": 42,
+    "totalPages": 5
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data` | `array` | The current page of results |
+| `meta.page` | `number` | Current page number (1-based) |
+| `meta.limit` | `number` | Items per page |
+| `meta.total` | `number` | Total matching records across all pages |
+| `meta.totalPages` | `number` | Total number of pages |
+
+### Individual resource endpoints
+
+Endpoints that return a single resource (e.g. `GET /leads/:id`, `POST /contacts`) return the resource object directly at the top level — no envelope wrapper.
+
+<Note>
+  Endpoints that perform a logical deletion (e.g. `DELETE /leads/:id`) return `{ "ok": true }` on success rather than the deleted resource.
+</Note>
+
+---
+
+## Roles
+
+The API enforces two user roles:
+
+| Role | Description |
+|---|---|
+| `ADMINISTRADOR` | Full access, including user management, invitations, and all CRM data. |
+| `TRABAJADOR` | Access to CRM operations (leads, activities, contacts, quotations, organizations). Cannot manage users or send invitations. |
+
+Routes that are restricted to `ADMINISTRADOR` are explicitly noted in each module's reference page. Calling an admin-only route with a `TRABAJADOR` account returns `403 Forbidden`.
+
+<Note>
+  Your role is encoded in your JWT and evaluated on every request. You cannot change your own role — only an administrator can do that.
+</Note>
+
+---
+
+## Soft deletes
+
+Several entities — **leads**, **activities**, and **quotations** — use logical (soft) deletion rather than physical removal. When you call `DELETE` on one of these resources, the API sets a `deletedAt` timestamp on the record. The record is then excluded from all list and detail queries automatically.
+
+This means:
+
+- Soft-deleted records are **never returned** in `GET` responses.
+- Attempting to fetch a soft-deleted record by ID returns `404 Not Found`.
+- The underlying data is preserved in the database for audit and recovery purposes.
+
+<Tip>
+  Contacts and organizations are not soft-deleted. If you need to remove them, contact your system administrator to request removal.
+</Tip>

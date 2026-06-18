@@ -1,0 +1,309 @@
+---
+title: "Authenticate with the Bioactiva CRM API"
+sidebarTitle: "Authentication"
+description: "Learn how to obtain a JWT access token, pass it on requests, and use the refresh token to stay authenticated."
+---
+
+The Bioactiva CRM API uses **JWT (JSON Web Token)** access tokens for authentication. You obtain an access token by logging in with your email and password, then include it in the `Authorization: Bearer` header on every protected request. Access tokens are short-lived — they expire after **15 minutes** — but a rotating `httpOnly` refresh-token cookie is issued alongside the access token so your application can silently request a new one without asking the user to log in again.
+
+<Warning>
+  Access tokens expire after **15 minutes**. Your application must call `POST /auth/refresh` before expiry (or handle `401 Unauthorized` responses) to keep the session alive. Failing to refresh will require the user to log in again.
+</Warning>
+
+<Warning>
+  **Sesión única por cuenta.** Solo puede haber **una sesión activa** por usuario. Cada `POST /auth/login` exitoso **invalida las sesiones anteriores** de esa cuenta. Iniciar sesión en un segundo dispositivo cierra la sesión del primero.
+
+  - Cualquier request con un access token de una sesión superada responde `401 Unauthorized` con `"No autorizado"`.
+  - `POST /auth/refresh` responde `401 Unauthorized` con `"La sesión ha expirado"` si la sesión fue reemplazada por un login más reciente.
+
+  Esta política aplica a **toda la API** — no solo a los endpoints de autenticación.
+</Warning>
+
+---
+
+## Login
+
+Call `POST /auth/login` with the user's email address and password to start a session.
+
+<Steps>
+  <Step title="Send credentials">
+    ```http
+    POST /auth/login
+    Content-Type: application/json
+    ```
+
+    ```json
+    {
+      "correo": "usuario@dominio.com",
+      "password": "123456"
+    }
+    ```
+
+    | Field | Type | Required | Description |
+    | --- | --- | --- | --- |
+    | `correo` | `string` (email) | Yes | The user's registered email address |
+    | `password` | `string` | Yes | The user's password |
+  </Step>
+  <Step title="Receive the access token">
+    On success the API returns `200 OK` with an access token in the response body:
+
+    ```json
+    {
+      "accessToken": "eyJhbGciOi...",
+      "accessTokenExpiresIn": 900
+    }
+    ```
+
+    | Field | Type | Description |
+    | --- | --- | --- |
+    | `accessToken` | `string` | A signed JWT valid for 900 seconds (15 minutes) |
+    | `accessTokenExpiresIn` | `number` | Lifetime of the access token in seconds |
+  </Step>
+  <Step title="Cookie is set automatically">
+    The API also sets an `httpOnly` cookie named `refreshToken` with these attributes:
+
+    | Attribute | Value |
+    | --- | --- |
+    | `httpOnly` | `true` |
+    | `sameSite` | `lax` |
+    | `path` | `/auth/refresh` |
+    | `secure` | `true` in production (`NODE_ENV=production`) |
+    | `maxAge` | 7 days |
+
+    <Note>
+      The refresh token is **never** returned in the JSON response body. Because the cookie is scoped to the `/auth/refresh` path, it is sent automatically only when your client calls that endpoint — it is not exposed to JavaScript or other API calls. Do not attempt to store or manage it manually.
+    </Note>
+  </Step>
+</Steps>
+
+**Possible errors**
+
+| Status | Cause |
+| --- | --- |
+| `400 Bad Request` | Request body is invalid (e.g. `correo` is not a valid email, or a required field is missing) |
+| `401 Unauthorized` | Credentials are invalid or the account cannot be authenticated |
+
+---
+
+## Using the token
+
+Include the access token as a Bearer token in the `Authorization` header on every protected request:
+
+```http
+Authorization: Bearer <accessToken>
+```
+
+**Example:**
+
+```http
+GET /leads
+Authorization: Bearer eyJhbGciOi...
+```
+
+Any request to a protected endpoint that is missing this header, or that carries an expired or malformed token, returns `401 Unauthorized`.
+
+---
+
+## Refreshing the token
+
+Call `POST /auth/refresh` to obtain a new access token before the current one expires. You do not need to send a body — the browser (or HTTP client) automatically includes the `refreshToken` cookie because it is scoped to this path.
+
+```http
+POST /auth/refresh
+```
+
+On success the API returns a fresh access token:
+
+```json
+{
+  "accessToken": "eyJhbGciOi...",
+  "accessTokenExpiresIn": 900
+}
+```
+
+The `refreshToken` cookie is also **rotated** on every successful refresh — the old value is invalidated and a new one is set. This limits the impact of a stolen refresh token.
+
+**Possible errors**
+
+| Status | Cause |
+| --- | --- |
+| `401 Unauthorized` | Cookie is missing, the refresh token is invalid, or it has expired |
+
+<Tip>
+  Implement proactive refresh by scheduling a call to `POST /auth/refresh` a minute or two before `accessTokenExpiresIn` elapses. This avoids your users seeing mid-session 401 errors.
+</Tip>
+
+---
+
+## Who am I?
+
+Call `GET /auth/me` at any time to retrieve the profile of the currently authenticated user.
+
+```http
+GET /auth/me
+Authorization: Bearer <accessToken>
+```
+
+**Response `200 OK`:**
+
+```json
+{
+  "id": 1,
+  "nombres": "Juan",
+  "apellidos": "Pérez",
+  "correo": "usuario@dominio.com",
+  "created_at": "2026-05-19T00:00:00.000Z",
+  "role": 1,
+  "estado": 1,
+  "updated_at": "2026-05-19T00:00:00.000Z"
+}
+```
+
+**Possible errors**
+
+| Status | Cause |
+| --- | --- |
+| `401 Unauthorized` | Token is missing, expired, or invalid |
+
+---
+
+## Password reset
+
+If a user forgets their password, use the three-step reset flow below. None of these endpoints require authentication.
+
+<Steps>
+  <Step title="Request a reset token">
+    Send the user's email address to `POST /reset-password/request`. If the address is found, the API emails a one-time token to that address.
+
+    ```http
+    POST /reset-password/request
+    Content-Type: application/json
+    ```
+
+    ```json
+    {
+      "correo": "usuario@dominio.com"
+    }
+    ```
+
+    **Response `200 OK`:**
+
+    ```json
+    { "ok": true }
+    ```
+
+    The token expires **2 hours** after it is issued. Only one reset request is allowed every **5 minutes** per email address.
+
+    **Possible errors**
+
+    | Status | `error` | `kind` | Cause |
+    | --- | --- | --- | --- |
+    | `400 Bad Request` | `ResetPasswordDomainNotAllowedException` | `VALIDATION` | The email domain is not on the allow-list |
+    | `404 Not Found` | `UserNotFoundException` | `NOT_FOUND` | The email is not registered, or the account is inactive/suspended |
+    | `409 Conflict` | `ActiveResetTokenException` | `CONFLICT` | A reset request for this email was issued less than 5 minutes ago |
+
+    See [`POST /reset-password/request`](/api/auth/reset-password) for full error response bodies.
+  </Step>
+  <Step title="Validate the token">
+    Before showing a "choose new password" form, confirm the token is still valid by calling `POST /reset-password/validate`. The API returns the obfuscated email address the token belongs to, letting you show the user a confirmation hint.
+
+    ```http
+    POST /reset-password/validate
+    Content-Type: application/json
+    ```
+
+    ```json
+    {
+      "token": "uuid-received-by-email"
+    }
+    ```
+
+    **Response `200 OK`:**
+
+    ```json
+    {
+      "correo": "u***o@dominio.com"
+    }
+    ```
+
+    This call does **not** consume the token — it only checks its current status.
+
+    **Possible errors:** `400 Bad Request` if the token is invalid, has already been used, or has expired.
+  </Step>
+  <Step title="Reset the password">
+    Submit the token together with the new password and its confirmation to `POST /reset-password/reset`.
+
+    ```http
+    POST /reset-password/reset
+    Content-Type: application/json
+    ```
+
+    ```json
+    {
+      "token": "uuid-received-by-email",
+      "password": "nueva123",
+      "confirmPassword": "nueva123"
+    }
+    ```
+
+    **Response `200 OK`:**
+
+    ```json
+    { "ok": true }
+    ```
+
+    Once consumed, the token is permanently invalidated and **cannot be reused**. The user must request a new token if they need to reset their password again.
+
+    **Possible errors**
+
+    | Status | Cause |
+    | --- | --- |
+    | `400 Bad Request` | `password` and `confirmPassword` do not match |
+    | `400 Bad Request` | Token is invalid, has already been used, or has expired |
+    | `400 Bad Request` | Request body is invalid (e.g. a required field is missing or malformed) |
+  </Step>
+</Steps>
+
+---
+
+## Joining via invitation
+
+If you received an invitation email from an administrator, you can activate your account and start a session in a single step — no separate login needed.
+
+Call `POST /invitations/accept` with the invitation token from your email, your name, and the password you want to use:
+
+```http
+POST /invitations/accept
+Content-Type: application/json
+```
+
+```json
+{
+  "token": "uuid-from-invitation-email",
+  "nombres": "Juan",
+  "apellidos": "Pérez",
+  "password": "12345678",
+  "confirmPassword": "12345678"
+}
+```
+
+**Response `200 OK`:**
+
+```json
+{
+  "accessToken": "eyJhbGciOi...",
+  "accessTokenExpiresIn": 900
+}
+```
+
+The API activates your account, signs you in, and returns an access token exactly like `POST /auth/login` does — including setting the `refreshToken` cookie. You can start making authenticated requests immediately.
+
+**Possible errors**
+
+| Status | Cause |
+| --- | --- |
+| `400 Bad Request` | Passwords do not match, request body is invalid, or the token is invalid, already accepted, or expired |
+
+<Warning>
+  Invitation tokens are **single-use**. Once you call `POST /invitations/accept` successfully, the token is consumed and cannot be used again. If your invitation has expired, ask an administrator to send a new one.
+</Warning>

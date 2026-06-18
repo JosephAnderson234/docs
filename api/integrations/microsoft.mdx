@@ -1,0 +1,159 @@
+---
+title: "Microsoft Integration API — Connect, Check Status, and Disconnect"
+sidebarTitle: "Microsoft"
+description: "OAuth2 endpoints to connect and disconnect a Microsoft account for Outlook Calendar and Teams meeting sync in Bioactiva CRM."
+---
+
+These four endpoints manage your Microsoft account connection in Bioactiva CRM. Once connected, `REUNION`-type activities can create Outlook Calendar events and Teams meetings **on demand** via [`POST /activities/{id}/calendar-event`](/api/activities/overview#post-activities-id-calendar-event). The integration is **unidirectional**: the CRM pushes data to Microsoft, never the other way around.
+
+<Warning>
+  **Breaking:** `POST /activities` ya **no** acepta `syncWithMicrosoft` ni `createTeamsMeeting`. El evento de Outlook/Teams se crea **bajo demanda** con [`POST /activities/{id}/calendar-event`](/api/activities/overview#post-activities-id-calendar-event).
+</Warning>
+
+---
+
+## GET /microsoft/connect — Get OAuth authorization URL
+
+Devuelve la URL de autorización de Microsoft. Tras completar el OAuth, el usuario es redirigido de vuelta a la app.
+
+**Authentication**: JWT required.
+
+### Query parameters
+
+<ParamField query="returnTo" type="string">
+  Ruta **interna** relativa a la que volver tras conectar (p. ej. `/notificaciones`). Debe empezar por `/`; valores no válidos o externos se ignoran y se usa `/ajustes` por defecto.
+</ParamField>
+
+### Example request
+
+```http
+GET /microsoft/connect?returnTo=/notificaciones
+Authorization: Bearer <token>
+```
+
+### Response `200 OK`
+
+```json
+{
+  "url": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=..."
+}
+```
+
+Open the returned URL in a browser to begin the OAuth flow. After you grant the requested permissions, Microsoft redirects back to the application callback endpoint automatically.
+
+<ResponseField name="url" type="string">
+  The full Microsoft OAuth2 authorization URL, including the requested scopes and a state parameter that identifies your session and the `returnTo` destination.
+</ResponseField>
+
+**Errors**
+
+- `401 Unauthorized` — No valid JWT was provided.
+
+---
+
+## GET /microsoft/callback — OAuth callback (handled by the backend)
+
+Endpoint de retorno del OAuth de Microsoft (no se llama directamente desde el front). No requiere Bearer (lo invoca Microsoft). Tras procesar el código, **redirige** a:
+
+```text
+HTTP 302 → ${FRONTEND_URL}{returnTo}?microsoft=connected
+```
+
+o, si algo falla (código expirado, error de red, sesión inválida):
+
+```text
+HTTP 302 → ${FRONTEND_URL}{returnTo}?microsoft=error
+```
+
+El destino `returnTo` es el indicado en [`GET /microsoft/connect`](#get-microsoft-connect-get-oauth-authorization-url); por defecto `/ajustes`.
+
+<Note>
+  This endpoint is public by design — Microsoft redirects here without a JWT. The user identity and the `returnTo` destination are verified via the state parameter embedded in the original authorization URL.
+</Note>
+
+---
+
+## GET /microsoft/status — Check connection status
+
+Returns whether the currently authenticated user has an active Microsoft account connected.
+
+**Authentication**: JWT required.
+
+**Response `200 OK`**
+
+```json
+{ "connected": true, "microsoftEmail": "karien.diaz@bioactiva.com" }
+```
+
+or
+
+```json
+{ "connected": false, "microsoftEmail": null }
+```
+
+<ResponseField name="connected" type="boolean">
+  `true` if a Microsoft connection exists for this user; `false` otherwise.
+</ResponseField>
+
+<ResponseField name="microsoftEmail" type="string | null">
+  Email de la cuenta Microsoft conectada, o `null` si no hay conexión.
+</ResponseField>
+
+Use this endpoint to determine whether the current user can call [`POST /activities/{id}/calendar-event`](/api/activities/overview#post-activities-id-calendar-event). If `connected` is `false`, the on-demand calendar/Teams creation will fail with `ResponsibleNotConnectedException`.
+
+**Errors**
+
+- `401 Unauthorized` — No valid JWT was provided.
+
+---
+
+## DELETE /microsoft/disconnect — Disconnect Microsoft account
+
+Removes the stored Microsoft connection for the currently authenticated user. After disconnecting, the CRM will no longer be able to create Outlook events or Teams meetings on behalf of this user.
+
+**Authentication**: JWT required.
+
+**Response `200 OK`**
+
+```json
+{ "ok": true }
+```
+
+**Errors**
+
+| Status | When |
+| --- | --- |
+| 401 | Not authenticated |
+| 404 | No active Microsoft connection found for this user |
+
+<Note>
+  After disconnecting, calls to [`POST /activities/{id}/calendar-event`](/api/activities/overview#post-activities-id-calendar-event) for activities whose responsible is this user will fail with `ResponsibleNotConnectedException`. Existing activities that already have an `outlookEventId` are not retroactively affected — their Outlook events remain in place.
+</Note>
+
+---
+
+## Full connection workflow
+
+Follow these steps to connect a Microsoft account for the first time:
+
+<Steps>
+  <Step title="Retrieve the authorization URL">
+    Call `GET /microsoft/connect` with a valid JWT. Save the `url` value from the response.
+  </Step>
+  <Step title="Open the URL in a browser">
+    Navigate to the returned URL. Microsoft's login page will load, prompting you to sign in with your work or school account.
+  </Step>
+  <Step title="Grant the requested permissions">
+    Review and accept the permission request. This covers calendar read/write access and Teams meeting creation.
+  </Step>
+  <Step title="Wait for the redirect">
+    Microsoft redirects your browser back to the application. The backend automatically exchanges the authorization code for tokens and saves the connection.
+  </Step>
+  <Step title="Verify the connection">
+    Call `GET /microsoft/status`. A successful connection returns `{ "connected": true, "microsoftEmail": "..." }`. You are now ready to call [`POST /activities/{id}/calendar-event`](/api/activities/overview#post-activities-id-calendar-event) on `REUNION` activities.
+  </Step>
+</Steps>
+
+<Tip>
+  Teams meeting creation requires a **work or school (Azure AD) account** with an active Teams license. If you connect a personal Microsoft account (outlook.com, hotmail.com), Outlook calendar events will be created successfully, but `teamsMeetingUrl` will return `null`.
+</Tip>

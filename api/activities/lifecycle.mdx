@@ -1,0 +1,105 @@
+---
+title: "Activity Lifecycle — Complete or Cancel an Activity"
+sidebarTitle: "Lifecycle"
+description: "Mark activities as completed or cancelled using dedicated endpoints. State transitions are one-way and enforced by the API."
+---
+
+Activities follow a one-way lifecycle. Once an activity moves to `REALIZADA` or `CANCELADA`, it cannot be reverted. Use the dedicated endpoints below to record the outcome of a pending activity.
+
+```
+PENDIENTE
+  ├── /complete → REALIZADA  (terminal)
+  └── /cancel   → CANCELADA  (terminal)
+```
+
+---
+
+## PATCH /activities/:id/complete
+
+Mark an activity as completed. This sets the status to `REALIZADA` and is only allowed when the activity is currently in `PENDIENTE` state.
+
+**Authentication:** Bearer JWT required (`Authorization: Bearer <token>`).
+
+### Path parameter
+
+<ParamField path="id" type="number" required>
+  Numeric ID of the activity to complete.
+</ParamField>
+
+### Request
+
+No request body is required.
+
+### Response — `200 OK`
+
+Returns the updated activity object, identical in structure to the response from `GET /activities/:id`, with `estado` set to `REALIZADA`.
+
+### Errors
+
+| Status | When |
+|--------|------|
+| `400`  | Activity is already `REALIZADA` or `CANCELADA` — transition not permitted |
+| `404`  | Activity not found |
+
+<Note>
+  Completing an activity does **not** affect any linked Outlook Calendar event. The calendar event remains unchanged on the responsible user's calendar.
+</Note>
+
+---
+
+## PATCH /activities/:id/cancel
+
+Cancel an activity. This sets the status to `CANCELADA` and is only allowed when the activity is currently in `PENDIENTE` state.
+
+**Authentication:** Bearer JWT required (`Authorization: Bearer <token>`).
+
+### Path parameter
+
+<ParamField path="id" type="number" required>
+  Numeric ID of the activity to cancel.
+</ParamField>
+
+### Request
+
+No request body is required.
+
+### Response — `200 OK`
+
+Returns the updated activity object, identical in structure to the response from `GET /activities/:id`, with `estado` set to `CANCELADA`.
+
+### Errors
+
+| Status | When |
+|--------|------|
+| `400`  | Activity is already `CANCELADA` or `REALIZADA` — transition not permitted |
+| `404`  | Activity not found |
+
+<Note>
+  If the activity has a linked Outlook Calendar event (`outlookEventId` is set), cancelling the activity automatically deletes that Outlook event and clears both `outlookEventId` and `teamsMeetingUrl` on the activity record. A Microsoft sync failure will not block the cancellation — the activity is still marked `CANCELADA` and the error is logged.
+</Note>
+
+---
+
+## State diagram
+
+```
+                    ┌─────────────┐
+           create   │             │
+          ─────────►│  PENDIENTE  │
+                    │             │
+                    └──────┬──────┘
+                           │
+              ┌────────────┴────────────┐
+              │                         │
+         /complete                   /cancel
+              │                         │
+              ▼                         ▼
+       ┌─────────────┐          ┌─────────────┐
+       │   REALIZADA │          │  CANCELADA  │
+       │  (terminal) │          │  (terminal) │
+       └─────────────┘          └─────────────┘
+```
+
+<Warning>
+  Neither `REALIZADA` nor `CANCELADA` can transition to any other state. If you need to restart an activity for the same lead after one has been resolved, create a new activity for that lead — the one-pending-per-lead constraint only applies to activities currently in `PENDIENTE` state.
+</Warning>

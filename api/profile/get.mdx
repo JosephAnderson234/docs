@@ -1,0 +1,89 @@
+---
+title: "GET /profile — Retrieve My Profile"
+sidebarTitle: "GET /profile"
+description: "Return the profile of the currently authenticated user. Available to any authenticated role."
+---
+
+Use this endpoint to fetch the profile of the user attached to the current JWT. Any authenticated user can call it regardless of role.
+
+## Endpoint
+
+```text
+GET /profile
+```
+
+## Authentication
+
+`Authorization: Bearer <accessToken>` — **required**. Any role (`ADMINISTRADOR` or `TRABAJADOR`) may call this endpoint.
+
+<Note>
+  Only one active session is allowed per account. A token from a session that was replaced by a more recent login is rejected with `401 Unauthorized` (`"No autorizado"`). See [Authentication](/authentication) for details.
+</Note>
+
+## Request Example
+
+```http
+GET /profile
+Authorization: Bearer eyJhbGciOi...
+```
+
+## Response
+
+### `200 OK`
+
+```json
+{
+  "id": 1,
+  "nombres": "Juan",
+  "apellidos": "Pérez",
+  "correo": "usuario@dominio.com",
+  "rol": "TRABAJADOR",
+  "estado": "ACTIVO",
+  "fechaRegistro": "2026-01-15T10:30:00.000Z"
+}
+```
+
+<ResponseField name="id" type="number">
+  Unique numeric identifier of the authenticated user.
+</ResponseField>
+
+<ResponseField name="nombres" type="string">
+  First name(s) of the user.
+</ResponseField>
+
+<ResponseField name="apellidos" type="string">
+  Last name(s) of the user.
+</ResponseField>
+
+<ResponseField name="correo" type="string">
+  Email address of the user. Not modifiable from this profile resource.
+</ResponseField>
+
+<ResponseField name="rol" type="string">
+  Role assigned to the user. One of `ADMINISTRADOR` or `TRABAJADOR`.
+</ResponseField>
+
+<ResponseField name="estado" type="string">
+  Current account status. One of `PENDIENTE`, `ACTIVO`, or `SUSPENDIDO`.
+</ResponseField>
+
+<ResponseField name="fechaRegistro" type="string (ISO 8601)">
+  Timestamp of when the user account was created.
+</ResponseField>
+
+## Errors
+
+| Status | When |
+| --- | --- |
+| `401 Unauthorized` | No token provided, the token has expired, is invalid, or belongs to a session that was replaced by a newer login. |
+
+```json
+{
+  "statusCode": 401,
+  "error": "Unauthorized",
+  "kind": "unauthorized",
+  "message": "No autorizado",
+  "path": "/profile",
+  "timestamp": "2026-06-10T10:30:00.000Z"
+}
+```

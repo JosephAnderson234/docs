@@ -1,0 +1,65 @@
+---
+title: "Bioactiva CRM API Documentation"
+sidebarTitle: "Home"
+description: "Complete reference for the Bioactiva CRM REST API — manage leads, contacts, organizations, activities, and quotations."
+---
+
+Bioactiva CRM API gives your team a structured, token-authenticated REST interface to manage the full commercial pipeline: from capturing leads and contacts to scheduling activities, generating quotations, and syncing meetings to Microsoft Outlook and Teams.
+
+<CardGroup cols={2}>
+  <Card title="Introduction" icon="book-open" href="/introduction">
+    Understand what the API does, how it's organized, and where to start.
+  </Card>
+  <Card title="Authentication" icon="key" href="/authentication">
+    Get an access token and learn how to pass it on every request.
+  </Card>
+  <Card title="Leads" icon="funnel" href="/concepts/leads">
+    Manage sales opportunities through the full pipeline lifecycle.
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/auth/login">
+    Explore every endpoint with request/response examples.
+  </Card>
+</CardGroup>
+
+## Get started in four steps
+
+<Steps>
+  <Step title="Obtain your access token">
+    Call `POST /auth/login` with your email and password. The response returns an `accessToken` (valid for 15 minutes) and sets an `httpOnly` `refreshToken` cookie.
+  </Step>
+  <Step title="Authenticate your requests">
+    Include the bearer token on every protected endpoint:
+    ```http
+    Authorization: Bearer <accessToken>
+    ```
+  </Step>
+  <Step title="Refresh when the token expires">
+    When the access token expires, call `POST /auth/refresh`. Your browser or HTTP client automatically sends the cookie — no body needed.
+  </Step>
+  <Step title="Build your workflow">
+    Create an organization, add a contact, open a lead, log activities, and close with a quotation. Follow the [Core Concepts](/concepts/leads) guides for the full flow.
+  </Step>
+</Steps>
+
+## Explore by resource
+
+<CardGroup cols={3}>
+  <Card title="Organizations" icon="building" href="/concepts/organizations">
+    Register and look up companies, including SUNAT data.
+  </Card>
+  <Card title="Contacts" icon="address-book" href="/concepts/contacts">
+    Track individuals associated with each organization.
+  </Card>
+  <Card title="Activities" icon="calendar" href="/concepts/activities">
+    Schedule meetings, calls, and emails linked to leads.
+  </Card>
+  <Card title="Quotations" icon="file-invoice" href="/concepts/quotations">
+    Create and send commercial proposals that close leads.
+  </Card>
+  <Card title="Microsoft Integration" icon="microsoft" href="/integrations/microsoft">
+    Sync activities to Outlook Calendar and Microsoft Teams.
+  </Card>
+  <Card title="Error Reference" icon="triangle-exclamation" href="/errors">
+    Understand HTTP error codes and error response shapes.
+  </Card>
+</CardGroup>

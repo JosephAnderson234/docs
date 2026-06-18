@@ -1,0 +1,86 @@
+---
+title: "Organizations: Companies and Entities in the CRM"
+sidebarTitle: "Organizations"
+description: "Organizations represent companies registered in Bioactiva CRM. Learn how to create them, query SUNAT data, and associate contacts and leads."
+---
+
+An organization (`empresa`) is the top-level entity in Bioactiva CRM. All contacts and leads are associated with an organization — you cannot create either without first having an organization in place.
+
+When creating an organization, you can optionally provide a RUC (Peru tax ID) to pull official details automatically from SUNAT. This pre-fills fields like the legal name, activity, size, and location, reducing manual data entry and ensuring accuracy.
+
+## Key Fields
+
+| Field | Description |
+| --- | --- |
+| `nombre` | Legal name of the organization |
+| `nombreComercial` | Commercial or brand name |
+| `ruc` | Peru tax ID (exactly 11 digits). Validated against SUNAT if provided |
+| `tipo` | Enterprise type (see enum values below) |
+| `sector` | Industry sector (see enum values below) |
+| `tamano` | Company size (see enum values below) |
+| `ubicacion` | City or location |
+| `linkedin` | Company LinkedIn URL |
+
+## SUNAT Lookup
+
+Before creating an organization, use the SUNAT endpoint to pre-fill its data from Peru's tax authority registry:
+
+```text
+GET /organizations/sunat?query={query}
+```
+
+The `query` query-string parameter can be either:
+
+- An **11-digit RUC** for an exact lookup by tax ID.
+- A **company name or partial name** for a list of matching results.
+
+<Note>
+  The value of `query` must be URL-encoded — for example, spaces become `%20` (`?query=mi%20empresa`).
+</Note>
+
+<Note>
+  The SUNAT lookup depends on the SUNAT data service being available. If the service is unreachable, the endpoint returns an error rather than silently skipping the lookup.
+</Note>
+
+A successful RUC lookup returns fields such as `razonSocial`, `nombreComercial`, `tipo`, `ubicacion`, `actividadEconomica`, `tamano`, and `sector`, which you can then pass directly into `POST /organizations`.
+
+If you provide a `ruc` when calling `POST /organizations`, the API validates it against SUNAT automatically. A RUC that does not exist in SUNAT or is already registered in the CRM will return `400 Bad Request`.
+
+## Enums
+
+### `tipo` — Enterprise Type
+
+| Value | Description |
+| --- | --- |
+| `EMPRESA_NACIONAL` | Peruvian domestic company |
+| `EMPRESA_EXTRANJERA` | Foreign company |
+| `INDEPENDIENTE` | Independent / sole trader |
+
+### `sector` — Industry Sector
+
+| Value | Description |
+| --- | --- |
+| `TECNOLOGIA` | Technology |
+| `SALUD` | Health |
+| `EDUCACION` | Education |
+| `FINANZAS` | Finance |
+| `OTROS` | Other |
+
+### `tamano` — Company Size
+
+| Value | Description |
+| --- | --- |
+| `MICRO` | Micro enterprise |
+| `PEQUENO` | Small enterprise |
+| `MEDIANO` | Medium enterprise |
+| `GRANDE` | Large enterprise |
+
+<CardGroup cols={2}>
+  <Card title="Organizations API Overview" icon="building" href="/api/organizations/overview">
+    Explore all organization endpoints: create, list, retrieve, and update.
+  </Card>
+
+  <Card title="SUNAT Lookup" icon="magnifying-glass" href="/api/organizations/sunat">
+    Search Peru's SUNAT registry by RUC or company name before creating an organization.
+  </Card>
+</CardGroup>

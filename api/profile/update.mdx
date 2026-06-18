@@ -1,0 +1,83 @@
+---
+title: "PATCH /profile — Update My Name"
+sidebarTitle: "PATCH /profile"
+description: "Update the authenticated user's nombres and/or apellidos. Email is not modifiable from this endpoint."
+---
+
+Use this endpoint to update your own first and/or last name. Both fields are optional, but at least one must be sent. Email (`correo`) is **not** modifiable through this resource — any attempt to send it (or any other unknown field) is rejected with `400 Bad Request`.
+
+## Endpoint
+
+```text
+PATCH /profile
+```
+
+## Authentication
+
+`Authorization: Bearer <accessToken>` — **required**. Any role (`ADMINISTRADOR` or `TRABAJADOR`) may call this endpoint to update their own profile.
+
+## Request Body
+
+<ParamField body="nombres" type="string">
+  New first name(s). Optional — 1 to 90 characters when sent.
+</ParamField>
+
+<ParamField body="apellidos" type="string">
+  New last name(s). Optional — 1 to 90 characters when sent.
+</ParamField>
+
+<Warning>
+  - At least **one** of `nombres` or `apellidos` must be present. Sending an empty body returns `400 Bad Request`.
+  - The `correo` field — and any other field not listed above — is **not allowed**. Sending it returns `400 Bad Request`.
+</Warning>
+
+### Request example
+
+```http
+PATCH /profile
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+```
+
+```json
+{
+  "nombres": "Juan Carlos",
+  "apellidos": "Pérez Gómez"
+}
+```
+
+## Response
+
+### `200 OK`
+
+Returns the updated user as a `UserResponseDto`.
+
+```json
+{
+  "id": 1,
+  "nombres": "Juan Carlos",
+  "apellidos": "Pérez Gómez",
+  "correo": "usuario@dominio.com",
+  "rol": "TRABAJADOR",
+  "estado": "ACTIVO",
+  "fechaRegistro": "2026-01-15T10:30:00.000Z"
+}
+```
+
+## Errors
+
+| Status | `kind` | When |
+| --- | --- | --- |
+| `400 Bad Request` | `validation` | No fields were sent, `nombres` or `apellidos` is shorter than 1 or longer than 90 characters, or the body contains a field that is not allowed (e.g. `correo`). |
+| `401 Unauthorized` | `unauthorized` | No token provided, the token has expired, is invalid, or belongs to a session that was replaced by a newer login. |
+
+```json
+{
+  "statusCode": 400,
+  "error": "Bad Request",
+  "kind": "validation",
+  "message": "El correo no es modificable desde este endpoint.",
+  "path": "/profile",
+  "timestamp": "2026-06-10T10:30:00.000Z"
+}
+```

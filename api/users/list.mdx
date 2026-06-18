@@ -1,0 +1,164 @@
+---
+title: "GET /users — List and Filter System Users"
+sidebarTitle: "GET /users"
+description: "Retrieve a paginated list of users. Available to any authenticated user, with role-based visibility: administrators see everyone, workers see only other workers."
+---
+
+Use this endpoint to retrieve a paginated list of users registered in the system. You can narrow results by name, email, role, or account status.
+
+<Info>
+  **Cambio de autorización.** Antes este endpoint era exclusivo de `ADMINISTRADOR`. Ahora lo puede consultar **cualquier usuario autenticado**, con visibilidad acotada por rol. El resto de endpoints de `/users` (`PATCH /:id/disable`, `PATCH /:id/enable`, `PATCH /:id/role`) **siguen siendo exclusivos de `ADMINISTRADOR`** y devuelven `403` para no-admins.
+</Info>
+
+## Endpoint
+
+```text
+GET /users
+```
+
+## Authentication
+
+All requests must include a valid JWT in the `Authorization` header.
+
+### Visibility by role
+
+- **`ADMINISTRADOR`** — ve a **todos** los usuarios y puede filtrar por rol con el query param `role`.
+- **`TRABAJADOR`** — solo ve a **otros trabajadores**. El query param `role` se **ignora** y el listado se restringe siempre a `TRABAJADOR`.
+
+## Query Parameters
+
+<ParamField query="search" type="string">
+  Filter users by name or email address. The match is case-insensitive and applies to both `nombres`/`apellidos` and `correo` fields.
+</ParamField>
+
+<ParamField query="role" type="string">
+  Filter by role. Accepted values: `ADMINISTRADOR` or `TRABAJADOR`. **Solo aplica a `ADMINISTRADOR`**; para usuarios `TRABAJADOR` este parámetro se ignora y el resultado se restringe siempre a `TRABAJADOR`.
+</ParamField>
+
+<ParamField query="estado" type="string">
+  Filter by account state. Accepted values: `PENDIENTE`, `ACTIVO`, or `SUSPENDIDO`.
+</ParamField>
+
+<ParamField query="page" default="1" type="number">
+  Page number to retrieve. Must be at least `1`.
+</ParamField>
+
+<ParamField query="limit" default="10" type="number">
+  Number of results per page. Must be at least `1`.
+</ParamField>
+
+## Example Request
+
+```http
+GET /users?search=juan&role=TRABAJADOR&estado=ACTIVO&page=1&limit=10
+Authorization: Bearer <token>
+```
+
+## Response — 200 OK
+
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "nombres": "Juan",
+      "apellidos": "Pérez",
+      "correo": "juan@example.com",
+      "rol": "TRABAJADOR",
+      "estado": "ACTIVO",
+      "fechaRegistro": "2026-01-15T10:30:00.000Z"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "limit": 10,
+    "total": 1,
+    "totalPages": 1
+  }
+}
+```
+
+### Response Fields
+
+<ResponseField name="data" type="array">
+  Array of user objects matching the applied filters.
+
+  <Expandable title="data[] properties">
+    <ResponseField name="data[].id" type="number">
+      Unique numeric identifier for the user.
+    </ResponseField>
+
+    <ResponseField name="data[].nombres" type="string">
+      First name(s) of the user.
+    </ResponseField>
+
+    <ResponseField name="data[].apellidos" type="string">
+      Last name(s) of the user.
+    </ResponseField>
+
+    <ResponseField name="data[].correo" type="string">
+      Email address associated with the account.
+    </ResponseField>
+
+    <ResponseField name="data[].rol" type="string">
+      Role assigned to the user. One of `ADMINISTRADOR` or `TRABAJADOR`.
+    </ResponseField>
+
+    <ResponseField name="data[].estado" type="string">
+      Current account status. One of `PENDIENTE`, `ACTIVO`, or `SUSPENDIDO`.
+    </ResponseField>
+
+    <ResponseField name="data[].fechaRegistro" type="string (ISO 8601)">
+      Timestamp of when the user account was created.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="meta" type="object">
+  Pagination metadata for the current response.
+
+  <Expandable title="meta properties">
+    <ResponseField name="meta.page" type="number">
+      The current page number returned.
+    </ResponseField>
+
+    <ResponseField name="meta.limit" type="number">
+      The number of results per page used for this response.
+    </ResponseField>
+
+    <ResponseField name="meta.total" type="number">
+      Total count of users that match the applied filters.
+    </ResponseField>
+
+    <ResponseField name="meta.totalPages" type="number">
+      Total number of pages available given the current `limit`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Response Field Reference
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `data[].id` | number | User ID |
+| `data[].nombres` | string | First name(s) |
+| `data[].apellidos` | string | Last name(s) |
+| `data[].correo` | string | Email address |
+| `data[].rol` | string | `ADMINISTRADOR` or `TRABAJADOR` |
+| `data[].estado` | string | `PENDIENTE`, `ACTIVO`, or `SUSPENDIDO` |
+| `data[].fechaRegistro` | ISO 8601 date | Account creation timestamp |
+| `meta.page` | number | Current page |
+| `meta.limit` | number | Results per page |
+| `meta.total` | number | Total users matching filters |
+| `meta.totalPages` | number | Total pages |
+
+<Note>
+  The `password` field is never included in any user response from this endpoint. Enum values for `rol` and `estado` are returned as human-readable strings, not numeric codes.
+</Note>
+
+## Error Responses
+
+| Status | When |
+| --- | --- |
+| `401 Unauthorized` | No valid JWT was provided, or the token has expired. |
+| `400 Bad Request` | One or more query parameter values failed validation (e.g. `page` less than 1). |

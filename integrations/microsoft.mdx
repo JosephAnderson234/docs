@@ -1,0 +1,196 @@
+---
+title: "Microsoft 365 Integration: Outlook Calendar and Teams"
+sidebarTitle: "Microsoft 365"
+description: "Connect your Microsoft account to sync CRM activities to Outlook Calendar and generate Teams meeting links directly from Bioactiva CRM."
+---
+
+Bioactiva CRM integrates with Microsoft 365 — specifically Outlook Calendar and Microsoft Teams — so you can create calendar events and Teams meeting links directly from your CRM activities. The integration authenticates with your Microsoft account using the OAuth2 Authorization Code Flow. Synchronization is strictly one-directional: **CRM → Microsoft**. The CRM is always the source of truth; changes made in Outlook or Teams are never reflected back.
+
+---
+
+## How it works
+
+The Microsoft 365 integration is designed to be lightweight and non-blocking. Here is the end-to-end flow:
+
+1. **Connect your account.** You authorize Bioactiva CRM to act on your behalf by completing a one-time OAuth2 sign-in with Microsoft.
+2. **Choose which activities to sync.** When you create or update an activity, set `syncWithMicrosoft: true` to have the CRM automatically create or update a corresponding Outlook Calendar event in the responsible user's (`idResponsable`) calendar.
+3. **Generate Teams meeting links.** For meeting-type activities (`tipo: REUNION`), also set `createTeamsMeeting: true` to embed a Microsoft Teams meeting directly inside the Outlook event. The join link is returned in `teamsMeetingUrl`.
+4. **Failures never block you.** If Microsoft is temporarily unavailable, the activity is saved normally in the CRM. The sync failure is logged silently — it never prevents the CRM operation from succeeding.
+
+**Sync is optional and explicit.** Only activities that include `syncWithMicrosoft: true` will produce a calendar event. This design prevents the integration from flooding calendars with internal-only activities that do not require a real meeting invite.
+
+---
+
+## Connecting your Microsoft account
+
+<Steps>
+  <Step title="Get the authorization URL">
+    Call `GET /microsoft/connect` with a valid JWT. The endpoint returns the Microsoft authorization URL you need to open in the browser:
+
+    ```http
+    GET /microsoft/connect
+    Authorization: Bearer <your-access-token>
+    ```
+
+    **Response:**
+
+    ```json
+    {
+      "url": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=..."
+    }
+    ```
+  </Step>
+
+  <Step title="Sign in with Microsoft">
+    Open the returned URL in the browser. Sign in with your Microsoft work, school, or personal account and grant the requested permissions. The CRM requests the permissions needed to read your profile and manage your Outlook Calendar and Teams meetings.
+  </Step>
+
+  <Step title="Confirm the connection">
+    After you grant permissions, Microsoft redirects you back to the application. The connection is confirmed automatically. You will land on the settings page with a `?microsoft=connected` indicator. If something goes wrong, you will see `?microsoft=error` instead.
+  </Step>
+</Steps>
+
+### Checking your connection status
+
+Call `GET /microsoft/status` at any time to verify whether your Microsoft account is currently connected:
+
+```http
+GET /microsoft/status
+Authorization: Bearer <your-access-token>
+```
+
+**Connected:**
+
+```json
+{ "connected": true }
+```
+
+**Not connected:**
+
+```json
+{ "connected": false }
+```
+
+### Disconnecting
+
+To remove the Microsoft connection, call `DELETE /microsoft/disconnect`. See [Disconnecting](#disconnecting) below for full details on what happens after you disconnect.
+
+---
+
+## Creating synced activities
+
+<Note>
+  The Outlook Calendar event is always created in the **responsible user's** (`idResponsable`) calendar — not in the calendar of whoever is making the API call. Make sure the intended responsible user has their Microsoft account connected before syncing activities to them.
+</Note>
+
+When you create a new activity via `POST /activities`, include `syncWithMicrosoft: true` to trigger calendar sync. For meetings that need a Teams link, also include `createTeamsMeeting: true`.
+
+**Example — creating a synced `REUNION` with a Teams meeting link:**
+
+```json
+{
+  "idLead": 1,
+  "nombreActividad": "Kickoff call",
+  "fechaInicio": "2026-06-10T14:00:00.000Z",
+  "fechaFin": "2026-06-10T15:00:00.000Z",
+  "tipo": "REUNION",
+  "notas": "Discuss project scope",
+  "idResponsable": 5,
+  "syncWithMicrosoft": true,
+  "createTeamsMeeting": true
+}
+```
+
+### What the response includes
+
+If the responsible user (`idResponsable: 5` in the example above) has their Microsoft account connected, the response will include two additional fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `outlookEventId` | `string` | The Outlook Calendar event identifier. Use this to trace the event back to Microsoft. |
+| `teamsMeetingUrl` | `string` | The Teams join link. Share this with attendees so they can join the meeting directly. |
+
+**Example response excerpt:**
+
+```json
+{
+  "id": 42,
+  "nombreActividad": "Kickoff call",
+  "tipo": "REUNION",
+  "estado": "PENDIENTE",
+  "fechaInicio": "2026-06-10T14:00:00.000Z",
+  "fechaFin": "2026-06-10T15:00:00.000Z",
+  "notas": "Discuss project scope",
+  "idResponsable": 5,
+  "responsableName": "Ana Torres",
+  "outlookEventId": "AAMkAGI2...",
+  "teamsMeetingUrl": "https://teams.microsoft.com/l/meetup-join/...",
+  "createdAt": "2026-06-05T09:00:00.000Z",
+  "updatedAt": "2026-06-05T09:00:00.000Z"
+}
+```
+
+If the responsible user **does not have** Microsoft connected — or if `syncWithMicrosoft` is `false` or omitted — both `outlookEventId` and `teamsMeetingUrl` return `null`, and the activity is created normally without any sync attempt.
+
+<Tip>
+  You can check whether a responsible user has Microsoft connected by calling `GET /microsoft/status` while authenticated as that user. If you are building an admin workflow, remind users to complete the OAuth2 connection flow before assigning them as responsible on synced activities.
+</Tip>
+
+---
+
+## Keeping events in sync
+
+Once an activity has an `outlookEventId`, Bioactiva CRM automatically propagates certain changes to the corresponding Outlook event. Here is how each update operation behaves:
+
+<CardGroup cols={3}>
+  <Card title="Updating an activity" icon="pencil">
+    `PATCH /activities/:id` pushes `nombreActividad`, `fechaInicio`, `fechaFin`, and `notas` to the Outlook event whenever `outlookEventId` is set. Any Microsoft error during the update is logged silently — the CRM update always succeeds.
+  </Card>
+  <Card title="Cancelling an activity" icon="calendar-xmark">
+    `PATCH /activities/:id/cancel` deletes the associated Outlook event and clears both `outlookEventId` and `teamsMeetingUrl` on the activity record. If the deletion fails on Microsoft's side, the activity is still cancelled in the CRM.
+  </Card>
+  <Card title="Completing an activity" icon="circle-check">
+    `PATCH /activities/:id/complete` marks the activity as `REALIZADA` in the CRM but does **not** interact with Microsoft at all. The Outlook event remains in the responsible user's calendar unchanged.
+  </Card>
+</CardGroup>
+
+---
+
+## Requirements and limitations
+
+<Warning>
+  Creating a Teams meeting link (`createTeamsMeeting: true`) requires the responsible user to have a **work or school Microsoft account (Azure AD)** with an active Teams license. If the responsible user has a personal Microsoft account (such as outlook.com or hotmail.com), the Outlook Calendar event will be created successfully, but `teamsMeetingUrl` will be `null` — Teams online meetings are not supported for personal accounts.
+</Warning>
+
+Keep the following constraints in mind when designing your integration:
+
+- **Only `REUNION` activities support Teams meetings.** Setting `createTeamsMeeting: true` on a `LLAMADA`, `EMAIL`, or `OTRO` activity has no effect — a Teams link is generated only when `tipo` is `REUNION`.
+- **Microsoft errors never block CRM operations.** If the Outlook or Teams API fails for any reason (network timeout, expired token, service outage), the activity is still saved or updated in the CRM. Check the Microsoft connection status and retry the sync manually by updating the activity.
+- **Accounts connected before new permissions were enabled must reconnect.** If your Microsoft connection was made before calendar and meeting permissions were enabled, you may need to reconnect to grant the updated permissions.
+- **Multi-tenant vs. single-tenant.** If the deployment uses a specific Azure AD tenant ID instead of `common`, personal Microsoft accounts (outlook.com, hotmail.com) will not be able to authenticate. Contact your administrator if you are unsure which mode applies to your instance.
+
+---
+
+## Disconnecting
+
+To remove your Microsoft account from Bioactiva CRM, call `DELETE /microsoft/disconnect`:
+
+```http
+DELETE /microsoft/disconnect
+Authorization: Bearer <your-access-token>
+```
+
+**Response:**
+
+```json
+{ "ok": true }
+```
+
+After disconnecting:
+
+- Future activities created with `syncWithMicrosoft: true` will have `outlookEventId: null`. No sync will occur until you reconnect your Microsoft account by going through the OAuth2 flow again.
+- **Existing activities with an `outlookEventId` are not retroactively affected.** The field retains its value in the CRM database, and the corresponding event remains valid on the Microsoft side. Those events will simply no longer receive updates from the CRM until you reconnect.
+
+<Note>
+  Disconnecting does not delete any calendar events that were previously created. It only removes the CRM's ability to create or modify events going forward. If you want to clean up past events, delete them directly from Outlook.
+</Note>

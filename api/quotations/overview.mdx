@@ -1,0 +1,241 @@
+---
+title: "Quotations API — Create and Manage Commercial Proposals"
+sidebarTitle: "Quotations"
+description: "CRUD endpoints for quotations in Bioactiva CRM. Create proposals linked to leads, update them, and filter by status, remitente, or date range."
+---
+
+The Quotations API lets you create and manage commercial proposals (cotizaciones) inside Bioactiva CRM. Every quotation is linked to a lead and to a sending user (remitente). The creating user (`idAuthor`) is captured automatically from your session — you never pass it in the request body. New quotations always start in `PENDIENTE` status and support soft-delete, so records are never physically removed from the database.
+
+---
+
+## POST /quotations — Create a quotation
+
+**Authentication**: JWT required. `idAuthor` is set automatically from your session.
+
+<ParamField body="fechaCot" type="string" required>
+  Date of the quotation in ISO 8601 format (e.g., `"2026-06-15T00:00:00.000Z"`).
+</ParamField>
+
+<ParamField body="dirigido" type="string" required>
+  Who the proposal is addressed to. Maximum 90 characters.
+</ParamField>
+
+<ParamField body="nombreServicio" type="string" required>
+  Name of the service being quoted. Maximum 150 characters.
+</ParamField>
+
+<ParamField body="monto" type="string" required>
+  Amount as a decimal string (e.g., `"5000.00"`). Must be numeric. Stored internally as `Decimal(12,2)`.
+</ParamField>
+
+<ParamField body="tipo" type="string" required>
+  Currency code. Accepted values: `PEN` or `USD`.
+</ParamField>
+
+<ParamField body="idLead" type="number" required>
+  The lead this quotation belongs to. The lead must already exist in the system.
+</ParamField>
+
+<ParamField body="idRemitente" type="number" required>
+  The user ID of the sender. Must refer to an existing user.
+</ParamField>
+
+<ParamField body="cliente" type="string">
+  Client name. Maximum 120 characters. Optional.
+</ParamField>
+
+<ParamField body="producto" type="string">
+  Product name. Maximum 120 characters. Optional.
+</ParamField>
+
+<ParamField body="observacion" type="string">
+  Observations or notes. Maximum 1,000 characters. Optional.
+</ParamField>
+
+<ParamField body="linkPropuesta" type="string">
+  URL link to the full proposal document. Maximum 500 characters. Optional.
+</ParamField>
+
+**Request example**
+
+```json
+{
+  "fechaCot": "2026-06-15T00:00:00.000Z",
+  "dirigido": "Dr. Ramírez",
+  "cliente": "TechCorp S.A.C.",
+  "nombreServicio": "Cloud Migration Package",
+  "monto": "15000.00",
+  "tipo": "USD",
+  "observacion": "Includes 6 months of post-migration support",
+  "linkPropuesta": "https://docs.empresa.com/prop-2026-01",
+  "idLead": 1,
+  "idRemitente": 2
+}
+```
+
+**Response `201 Created`**
+
+```json
+{
+  "id": 1,
+  "fechaCot": "2026-06-15T00:00:00.000Z",
+  "dirigido": "Dr. Ramírez",
+  "cliente": "TechCorp S.A.C.",
+  "producto": null,
+  "nombreRemitente": "Ana Martínez",
+  "nombreServicio": "Cloud Migration Package",
+  "monto": "15000.00",
+  "tipo": "USD",
+  "estado": "PENDIENTE",
+  "observacion": "Includes 6 months of post-migration support",
+  "linkPropuesta": "https://docs.empresa.com/prop-2026-01",
+  "idLead": 1,
+  "leadServicioInteres": "Cloud migration consulting",
+  "leadEstado": "EN_PROSPECTO",
+  "contactName": "María García",
+  "idRemitente": 2,
+  "remitenteName": "Ana Martínez",
+  "idAuthor": 3,
+  "createdAt": "2026-06-01T10:30:00.000Z",
+  "updatedAt": "2026-06-01T10:30:00.000Z"
+}
+```
+
+**Errors**
+
+- `400 Bad Request` — `monto` is not a numeric string.
+- `404 Not Found` — The lead or remitente does not exist.
+
+<Note>
+  `nombreRemitente` is captured as a name snapshot at creation time. If the user later changes their name, this field will not change. Use `remitenteName` (resolved by JOIN) to see the sender's current name.
+</Note>
+
+---
+
+## GET /quotations — List quotations
+
+**Authentication**: JWT required.
+
+Use query parameters to filter the results. All parameters are optional. Results are sorted by `createdAt` descending and paginated.
+
+<ParamField query="idLead" type="number">
+  Filter quotations by lead ID.
+</ParamField>
+
+<ParamField query="estado" type="string">
+  Filter by status. Accepted values: `PENDIENTE`, `ENVIADA`, `ACEPTADA`, `RECHAZADA`.
+</ParamField>
+
+<ParamField query="idRemitente" type="number">
+  Filter by sender user ID.
+</ParamField>
+
+<ParamField query="fechaDesde" type="string">
+  Return only quotations whose `fechaCot` is on or after this ISO 8601 date.
+</ParamField>
+
+<ParamField query="fechaHasta" type="string">
+  Return only quotations whose `fechaCot` is on or before this ISO 8601 date. Must be greater than or equal to `fechaDesde`.
+</ParamField>
+
+<ParamField query="tipo" type="string">
+  Filter by currency. Accepted values: `PEN`, `USD` (the same enum already used in `tipo` on `POST /quotations` and `PATCH /quotations/:id`). Any other value is silently ignored and the filter is treated as not set.
+</ParamField>
+
+<ParamField query="page" default="1" type="number">
+  Page number (minimum 1).
+</ParamField>
+
+<ParamField query="limit" default="10" type="number">
+  Number of results per page (minimum 1).
+</ParamField>
+
+**Response `200 OK`** — Paginated list of quotation objects wrapped in `data` and `meta`.
+
+**Errors**
+
+- `400 Bad Request` — `fechaHasta` is before `fechaDesde`.
+
+---
+
+## GET /quotations/:id — Get one quotation
+
+**Authentication**: JWT required.
+
+Fetch the full detail of a single quotation by its numeric ID, including JOIN data for the linked lead and sender.
+
+**Response `200 OK`** — Full quotation object (same shape as items in the list endpoint).
+
+**Errors**
+
+- `404 Not Found` — Quotation does not exist or has been soft-deleted.
+
+---
+
+## PATCH /quotations/:id — Update a quotation
+
+**Authentication**: JWT required.
+
+Update any of the business fields on a quotation. All fields are optional — only the ones you include will be changed. You cannot modify `estado`, `idLead`, `idRemitente`, `createdAt`, or the soft-delete timestamp through this endpoint.
+
+**Allowed fields (all optional):** `fechaCot`, `dirigido`, `cliente`, `producto`, `nombreServicio`, `monto`, `tipo`, `observacion`, `linkPropuesta`
+
+```json
+{
+  "monto": "18000.00",
+  "observacion": "Extended to 9 months support"
+}
+```
+
+**Response `200 OK`** — Updated quotation object.
+
+**Errors**
+
+- `400 Bad Request` — The quotation is already in `ACEPTADA` or `RECHAZADA` status (terminal states cannot be modified).
+- `404 Not Found` — Quotation does not exist.
+
+---
+
+## DELETE /quotations/:id — Soft-delete a quotation
+
+**Authentication**: JWT required.
+
+Marks the quotation as logically deleted. The record is never physically removed and will no longer appear in list or detail queries.
+
+**Response `200 OK`**
+
+```json
+{ "ok": true }
+```
+
+**Errors**
+
+- `404 Not Found` — Quotation does not exist or has already been deleted.
+
+---
+
+## Response field reference
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | number | Quotation ID |
+| `fechaCot` | ISO 8601 | Quotation date |
+| `dirigido` | string | Addressee |
+| `cliente` | string or null | Client name |
+| `producto` | string or null | Product name |
+| `nombreRemitente` | string | Sender name snapshot (captured at creation) |
+| `nombreServicio` | string | Service name |
+| `monto` | string | Amount (decimal string) |
+| `tipo` | string | Currency (`PEN` or `USD`) |
+| `estado` | string | Status |
+| `observacion` | string or null | Observations |
+| `linkPropuesta` | string or null | Proposal URL |
+| `idLead` | number | Lead ID |
+| `leadServicioInteres` | string | Lead service of interest (JOIN) |
+| `leadEstado` | string | Lead status (JOIN) |
+| `contactName` | string | Lead's contact name (JOIN; empty string if no contact) |
+| `idRemitente` | number | Sender user ID |
+| `remitenteName` | string | Sender's current name (JOIN) |
+| `idAuthor` | number | Creating user ID (set automatically from your session) |
+| `createdAt` | ISO 8601 | Creation timestamp |
+| `updatedAt` | ISO 8601 | Last update timestamp |

@@ -1,0 +1,144 @@
+---
+title: "PATCH /leads/:id/status — Change a Lead's Pipeline Status"
+sidebarTitle: "Change Status"
+description: "Move a lead through the sales pipeline by changing its status. Status can also change automatically when a linked quotation is accepted or rejected."
+---
+
+Use this endpoint to manually advance a lead through the sales pipeline. You can set any valid status value at any time — there are no enforced one-way transitions when calling this endpoint directly. Leads can also close automatically when a linked quotation is accepted or rejected through the Quotations API, without any need to call this endpoint separately.
+
+---
+
+## Endpoint
+
+```text
+PATCH /leads/:id/status
+```
+
+**Authentication:** Bearer JWT required (`Authorization: Bearer <token>`).
+
+---
+
+## Path parameter
+
+<ParamField path="id" type="number" required>
+  Numeric ID of the lead whose status you want to change.
+</ParamField>
+
+---
+
+## Request body
+
+<ParamField body="estado" type="string" required>
+  The new pipeline status for this lead. Must be one of the following valid enum values:
+
+  - `EN_PROSPECTO`
+  - `OFERTADO`
+  - `CIERRE_CON_VENTA`
+  - `CIERRE_SIN_VENTA`
+</ParamField>
+
+### Example
+
+```json
+{ "estado": "OFERTADO" }
+```
+
+---
+
+## Response — `200 OK`
+
+Returns the fully updated lead object, identical in structure to the response from `GET /leads/:id`. The `ultimoCambioEstado` field will reflect the timestamp of this status change.
+
+---
+
+## Errors
+
+| Status | `error` | When |
+| --- | --- | --- |
+| `400` | — | `estado` is not a valid enum value |
+| `404` | — | Lead not found |
+| `409` | `CONFLICT` | The lead has a pending activity. It must be resolved (completed or cancelled) before the lead's status can change. See [Pending-activity guard](#pending-activity-guard) below. |
+
+### `409 Conflict` example
+
+```json
+{
+  "statusCode": 409,
+  "error": "CONFLICT",
+  "message": "No se puede cambiar el estado del lead 12 porque tiene actividades pendientes"
+}
+```
+
+### Pending-activity guard
+
+Every real status transition is blocked while the lead still has a `PENDIENTE` activity, regardless of the source or target status (`EN_PROSPECTO`, `OFERTADO`, `CIERRE_CON_VENTA`, or `CIERRE_SIN_VENTA`). To unblock the transition, **resolve the pending activity** — either complete it or cancel it through the Activities API — and then call `PATCH /leads/:id/status` again.
+
+<Note>
+  A lead can only have **one** activity in `PENDIENTE` at a time, so in practice this rule means resolving that single open activity before you advance or close the lead.
+</Note>
+
+<Tip>
+  Re-sending the **same** status the lead already has (a no-op, e.g. `PATCH` with `estado: "OFERTADO"` on a lead already in `OFERTADO`) does not trigger the pending-activity guard, because it is not a real transition.
+</Tip>
+
+---
+
+## Pipeline status reference
+
+The table below describes the meaning of each status and how leads typically move between them.
+
+| Status | Description |
+| --- | --- |
+| `EN_PROSPECTO` | Initial state. The lead has been identified but not yet engaged with a formal offer. Every new lead starts here. |
+| `OFERTADO` | A quotation has been prepared or sent to the prospect. Transitioning a lead **into**`OFERTADO` (a real transition — not a no-op when the lead was already `OFERTADO`) triggers automatic generation of a draft quotation. See [Auto-generated draft quotation on `OFERTADO`](#auto-generated-draft-quotation-on-ofertado) below. |
+| `CIERRE_CON_VENTA` | Deal won. Set automatically when a linked quotation is accepted via `PATCH /quotations/:id/accept`. |
+| `CIERRE_SIN_VENTA` | Deal lost. Set automatically when a linked quotation is rejected via `PATCH /quotations/:id/reject`. |
+
+### Typical flow
+
+```text
+EN_PROSPECTO
+    │
+    ▼
+OFERTADO
+    │
+    ├──► CIERRE_CON_VENTA   (deal won)
+    │
+    └──► CIERRE_SIN_VENTA   (deal lost)
+```
+
+You can set any status manually via this endpoint regardless of the current state, which is useful for corrections or non-standard pipeline paths.
+
+<Tip>
+  When you accept or reject a quotation via `PATCH /quotations/:id/accept` or `PATCH /quotations/:id/reject`, the linked lead's status is updated atomically in the same database transaction — you do not need to call this endpoint separately. Use this endpoint for manual overrides or when no quotation is involved.
+</Tip>
+
+---
+
+## `ultimoCambioEstado`
+
+## Every successful call to this endpoint updates the `ultimoCambioEstado` field on the lead to the current UTC timestamp. This gives you a reliable audit trail of when the lead last moved through the pipeline.
+
+## Auto-generated draft quotation on `OFERTADO`
+
+When a lead **transitions into** `OFERTADO` (i.e. its previous status was something other than `OFERTADO`), the backend automatically creates a draft quotation linked to the lead.
+
+The draft is created in status `PENDIENTE` and pre-filled from the lead and its related entities:
+
+| Quotation field | Source |
+| --- | --- |
+| `nombreServicio` | Lead's `servicioInteres`. |
+| Cliente / dirigido | The lead's organization details (name, RUC, address, etc.). |
+| Remitente | The lead's encargado (assigned user). |
+| `monto` | Initial value `"0.00"` — editable afterwards. |
+| `tipo` (moneda) | `PEN` — editable afterwards. |
+
+<Note>
+  **Behavior rules**
+
+  - **Real transition only.** Generation only fires when `estado` actually changes to `OFERTADO`. Calling `PATCH /leads/:id/status` with `OFERTADO` while the lead is already `OFERTADO` does **not** create another draft.
+  - **No duplicates.** If the lead already has at least one quotation (in any status), no new draft is created.
+  - **Best-effort.** Draft generation runs after the lead status change. If it fails, the lead's status change is **not** reverted — the lead remains `OFERTADO` and the failure is logged on the backend.
+  - **Editable.** The draft is a normal `PENDIENTE` quotation: `monto`, `tipo` (`PEN`/`USD`), and any other field can be edited through the Quotations API.
+  - **Configurable.** This behavior is controlled by the environment variable `AUTO_COTIZACION_ON_OFERTADO`. It is **enabled by default**; setting it to `"false"` disables automatic draft generation entirely.
+</Note>

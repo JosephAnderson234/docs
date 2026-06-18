@@ -1,0 +1,139 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "Bioactiva CRM API",
+  "theme": "luma",
+  "logo": {
+    "light": "https://media.brand.dev/07eb2388-6035-41b7-b701-fa7bac7a4d0a.svg",
+    "dark": "https://media.brand.dev/07eb2388-6035-41b7-b701-fa7bac7a4d0a.svg"
+  },
+  "favicon": "https://media.brand.dev/c6c9547e-7ce6-4ceb-85ad-d33b7e57dd91.jpg",
+  "colors": {
+    "primary": "#675ff1",
+    "light": "#4c4979",
+    "dark": "#040405"
+  },
+  "navbar": {
+    "primary": {
+      "type": "button",
+      "label": "Get Started",
+      "href": "/introduction"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guide",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "authentication",
+              "errors"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/leads",
+              "concepts/organizations",
+              "concepts/contacts",
+              "concepts/activities",
+              "concepts/quotations"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/microsoft"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Authentication",
+            "pages": [
+              "api/auth/login",
+              "api/auth/refresh",
+              "api/auth/me",
+              "api/auth/reset-password"
+            ]
+          },
+          {
+            "group": "Users & Invitations",
+            "pages": [
+              "api/users/list",
+              "api/users/assignable",
+              "api/users/enable-disable",
+              "api/invitations/overview"
+            ]
+          },
+          {
+            "group": "Organizations",
+            "pages": [
+              "api/organizations/overview",
+              "api/organizations/sunat"
+            ]
+          },
+          {
+            "group": "Contacts",
+            "pages": [
+              "api/contacts/overview"
+            ]
+          },
+          {
+            "group": "Leads",
+            "pages": [
+              "api/leads/overview",
+              "api/leads/status"
+            ]
+          },
+          {
+            "group": "Activities",
+            "pages": [
+              "api/activities/overview",
+              "api/activities/lifecycle"
+            ]
+          },
+          {
+            "group": "Quotations",
+            "pages": [
+              "api/quotations/overview",
+              "api/quotations/lifecycle"
+            ]
+          },
+          {
+            "group": "Dashboard",
+            "pages": [
+              "api/dashboard/metrics"
+            ]
+          },
+          {
+            "group": "Notifications",
+            "pages": [
+              "api/notifications/overview",
+              "api/notifications/templates",
+              "api/notifications/in-app"
+            ]
+          },
+          {
+            "group": "Data Management",
+            "pages": [
+              "api/data/export",
+              "api/data/import"
+            ]
+          },
+          {
+            "group": "Microsoft Integration",
+            "pages": [
+              "api/integrations/microsoft"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

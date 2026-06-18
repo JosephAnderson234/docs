@@ -1,0 +1,212 @@
+---
+title: "Excel Import — Asynchronous, Insert-Only Pipeline"
+sidebarTitle: "Import (Excel)"
+description: "Plantilla, validación y commit asíncrono de archivos .xlsx para insertar Organizaciones, Contactos, Leads y Cotizaciones en bloque."
+---
+
+Importa datos en bloque desde archivos `.xlsx`. El flujo es **insert-only** (no actualiza registros existentes) y **asíncrono**: el commit encola un job y el cliente hace polling sobre el estado.
+
+**Authentication:** Bearer JWT required (`Authorization: Bearer <token>`) en todos los endpoints.
+
+<Note>
+  **Reglas de importación**
+
+  - **Solo inserta.** Los duplicados (por `RUC`/`nombre` en organizaciones, `correo` en contactos) se **omiten** y se reportan en `skipped`.
+  - **Orden interno:** Organizaciones → Contactos → Leads (\+ actividad pendiente si la hoja Leads trae `"Próxima actividad"`) → Cotizaciones.
+  - **Relaciones por clave natural:** RUC para organizaciones, correo para contactos, `"ID Lead"` para leads.
+  - El `codigoCliente` de organizaciones se **genera automáticamente** a partir de `RUC + nombre`.
+  - Si la validación encuentra **errores bloqueantes, no se inserta nada**.
+</Note>
+
+<Warning>
+  **Cambio en la hoja Leads.** La columna **"Historial de contacto"** (antiguo `notasContacto`) **ya no se importa** y fue removida de la plantilla. Cualquier valor presente en esa columna se ignora durante `validate` y `commit`. Para registrar interacciones con el contacto, usá la columna **"Próxima actividad"** o las [Activities API](/api/activities/overview).
+</Warning>
+
+---
+
+## GET /data/import/template
+
+Descarga la plantilla `.xlsx` con las hojas **Organizaciones**, **Contactos**, **Leads**, **Cotizaciones** y una hoja **"Valores válidos"** con los enums aceptados.
+
+### Example request
+
+```bash
+curl -X GET \
+  'https://api.bioactiva.com/data/import/template' \
+  -H 'Authorization: Bearer <token>' \
+  -o plantilla-bioactiva.xlsx
+```
+
+### Response — `200 OK`
+
+- **Content-Type:** `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+- **Content-Disposition:** `attachment; filename="plantilla-bioactiva.xlsx"`
+- **Body:** binario `.xlsx`.
+
+---
+
+## POST /data/import/validate
+
+Dry-run de la importación. **No escribe en la base de datos.** Devuelve la lista completa de errores y warnings detectados.
+
+### Request
+
+- **Content-Type:** `multipart/form-data`
+
+<ParamField body="file" type="file (.xlsx)" required>
+  Archivo Excel basado en la plantilla.
+</ParamField>
+
+### Example request
+
+```bash
+curl -X POST \
+  'https://api.bioactiva.com/data/import/validate' \
+  -H 'Authorization: Bearer <token>' \
+  -F 'file=@bioactiva-import.xlsx'
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "valid": false,
+  "errors": [
+    { "sheet": "Organizaciones", "row": 5, "message": "RUC inválido" }
+  ],
+  "warnings": [
+    { "sheet": "Contactos", "row": 12, "message": "Correo duplicado, será omitido" }
+  ],
+  "parsedCounts": {
+    "organizaciones": 24,
+    "contactos": 31,
+    "leads": 18,
+    "cotizaciones": 7
+  }
+}
+```
+
+### Response fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `valid` | boolean | `true` si no hay errores bloqueantes. |
+| `errors` | `Array<{sheet,row,message}>` | Errores bloqueantes que impiden insertar. |
+| `warnings` | `Array<{sheet,row,message}>` | Advertencias no bloqueantes (p. ej. duplicados que se omitirán). |
+| `parsedCounts` | object | Cuántas filas se leíyeron por hoja. |
+
+---
+
+## POST /data/import/commit
+
+Encola el procesamiento de la importación. Devuelve el `jobId` que se debe consultar con `GET /data/import/jobs/:id`.
+
+### Request
+
+- **Content-Type:** `multipart/form-data`
+
+<ParamField body="file" type="file (.xlsx)" required>
+  Archivo Excel a importar.
+</ParamField>
+
+### Example request
+
+```bash
+curl -X POST \
+  'https://api.bioactiva.com/data/import/commit' \
+  -H 'Authorization: Bearer <token>' \
+  -F 'file=@bioactiva-import.xlsx'
+```
+
+### Response — `202 Accepted`
+
+```json
+{ "jobId": "a3f1c9d2-87e0-4b76-9c1c-9c4e6f0aa2b1" }
+```
+
+<Tip>
+  Recomendado: ejecutar `POST /data/import/validate` antes de `commit` para mostrarle al usuario los errores y warnings, y solo si `valid === true` continuar con el commit.
+</Tip>
+
+---
+
+## GET /data/import/jobs/:id
+
+Devuelve el estado del job de importación.
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  `jobId` devuelto por `POST /data/import/commit`.
+</ParamField>
+
+### Response — `200 OK`
+
+```json
+{
+  "id": "a3f1c9d2-87e0-4b76-9c1c-9c4e6f0aa2b1",
+  "state": "completed",
+  "progress": 100,
+  "result": {
+    "valid": true,
+    "validation": {
+      "valid": true,
+      "errors": [],
+      "warnings": [
+        { "sheet": "Contactos", "row": 12, "message": "Correo duplicado, omitido" }
+      ],
+      "parsedCounts": {
+        "organizaciones": 24,
+        "contactos": 31,
+        "leads": 18,
+        "cotizaciones": 7
+      }
+    },
+    "summary": {
+      "inserted": {
+        "organizaciones": 22,
+        "contactos": 28,
+        "leads": 18,
+        "actividades": 9,
+        "cotizaciones": 7
+      },
+      "skipped": [
+        { "sheet": "Organizaciones", "row": 9, "message": "RUC ya existe" },
+        { "sheet": "Contactos", "row": 12, "message": "Correo ya existe" }
+      ],
+      "warnings": []
+    }
+  },
+  "failedReason": null
+}
+```
+
+### Response fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | El `jobId`. |
+| `state` | `waiting` \| `active` \| `completed` \| `failed` \| `delayed` | Estado del job. |
+| `progress` | number (0–100) | Progreso aproximado. |
+| `result` | object \| null | Disponible cuando `state === "completed"`. |
+| `failedReason` | string \| null | Disponible cuando `state === "failed"`. |
+
+#### `result.summary.inserted`
+
+Cantidades insertadas por entidad (incluye `actividades` por las "Próxima actividad" de la hoja Leads).
+
+#### `result.summary.skipped`
+
+Filas omitidas por ser duplicados u otras razones reportables, en formato `{sheet,row,message}`.
+
+---
+
+## Errores
+
+| Status | When |
+| --- | --- |
+| `400` | Archivo no enviado, no es `.xlsx`, o `jobId` con formato inválido |
+| `401` | Falta o es inválido el token Bearer |
+| `404` | `jobId` no encontrado |
+
+Ver [Errors](/errors) para el envelope completo.

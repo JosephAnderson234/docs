@@ -1,0 +1,307 @@
+---
+title: "Email Templates — Manage Reusable Subject and HTML Body (CU011)"
+sidebarTitle: "Email Templates (CRUD)"
+description: "Create, list, retrieve, update, deactivate, and delete the email templates that power scheduled reminders and follow-ups in Bioactiva CRM."
+---
+
+Email templates are the reusable building blocks for the **subject** (`asunto`) and **HTML body** (`cuerpo`) of scheduled notifications. When a user schedules a reminder or follow-up, the chosen template's subject and body are **copied** into the notification — they can then be edited per notification without ever altering the original template.
+
+This page documents the full **management resource** at `/templates` (CU011). It covers creating, listing, retrieving, updating/deactivating, and deleting templates.
+
+<Note>
+  **Two surfaces, one concept.** There are two endpoints that deal with templates and they are intentionally separate:
+
+  - `GET /notifications/templates` — a **read-only selector** that returns only **active** templates. It is used by the UI when scheduling a notification. See [Reminders & Follow-ups](/api/notifications/overview).
+  - `/templates` (this page) — the **full management CRUD** described below. Inactive templates are managed here, never appear in the selector, and existing scheduled notifications keep working because they hold their own copy of subject and body.
+</Note>
+
+**Authentication:** Bearer JWT required (`Authorization: Bearer <token>`) on every endpoint. See [Authentication](/authentication) for how to obtain and pass the token.
+
+**OpenAPI tag:** `email-templates`
+
+**Base URL:** `https://api.bioactiva.com`
+
+---
+
+## The EmailTemplate object
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | number | Auto-generated template identifier. |
+| `nombre` | string | Unique human-readable name (1–100 chars). Shown in the template selector. |
+| `asunto` | string | Default email subject (1–255 chars). Copied into each notification on schedule. |
+| `cuerpo` | string (HTML) | Default email body in HTML. Copied into each notification on schedule. |
+| `activo` | boolean | Whether the template is available in the selector. Inactive templates are hidden from `GET /notifications/templates`. |
+| `createdAt` | ISO 8601 date-time | Creation timestamp. |
+| `updatedAt` | ISO 8601 date-time | Last update timestamp. |
+
+---
+
+## POST /templates
+
+Create a new email template.
+
+### Body parameters
+
+<ParamField body="nombre" type="string" required>
+  Unique template name. **1–100 characters.** Returns `409` if another template already uses this name.
+</ParamField>
+
+<ParamField body="asunto" type="string" required>
+  Default email subject. **1–255 characters.**
+</ParamField>
+
+<ParamField body="cuerpo" type="string" required>
+  Default HTML body. Stored as-is and copied into each scheduled notification.
+</ParamField>
+
+<ParamField body="activo" default="true" type="boolean">
+  Whether the template is selectable when scheduling notifications. Defaults to `true`.
+</ParamField>
+
+### Example request
+
+```bash
+curl -X POST \
+  'https://api.bioactiva.com/templates' \
+  -H 'Authorization: Bearer <token>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "nombre": "Recordatorio de reunión",
+    "asunto": "Recordatorio: reunión programada",
+    "cuerpo": "<p>Hola, recuerda tu reunión del {{fecha}}.</p>",
+    "activo": true
+  }'
+```
+
+### Response — `201 Created`
+
+```json
+{
+  "id": 12,
+  "nombre": "Recordatorio de reunión",
+  "asunto": "Recordatorio: reunión programada",
+  "cuerpo": "<p>Hola, recuerda tu reunión del {{fecha}}.</p>",
+  "activo": true,
+  "createdAt": "2026-06-09T14:32:10.000Z",
+  "updatedAt": "2026-06-09T14:32:10.000Z"
+}
+```
+
+### Errors
+
+| Status | When |
+| --- | --- |
+| `400` | Required fields missing or invalid (e.g., `nombre` empty or \> 100 chars, `asunto` empty or \> 255 chars, `cuerpo` missing). |
+| `409` | A template with the same `nombre` already exists. |
+
+---
+
+## GET /templates
+
+List email templates. By default, only **active** templates are returned. Pass `includeInactive=true` to include inactive ones for management screens.
+
+### Query parameters
+
+<ParamField query="includeInactive" default="false" type="boolean">
+  When `true`, includes inactive templates in the result. When omitted or `false`, only templates with `activo = true` are returned.
+</ParamField>
+
+### Example request
+
+```bash
+curl -X GET \
+  'https://api.bioactiva.com/templates?includeInactive=true' \
+  -H 'Authorization: Bearer <token>'
+```
+
+### Response — `200 OK`
+
+```json
+[
+  {
+    "id": 12,
+    "nombre": "Recordatorio de reunión",
+    "asunto": "Recordatorio: reunión programada",
+    "cuerpo": "<p>Hola, recuerda tu reunión del {{fecha}}.</p>",
+    "activo": true,
+    "createdAt": "2026-06-09T14:32:10.000Z",
+    "updatedAt": "2026-06-09T14:32:10.000Z"
+  },
+  {
+    "id": 9,
+    "nombre": "Plantilla legacy",
+    "asunto": "Aviso antiguo",
+    "cuerpo": "<p>Contenido legado.</p>",
+    "activo": false,
+    "createdAt": "2025-11-02T09:11:00.000Z",
+    "updatedAt": "2026-02-18T16:40:22.000Z"
+  }
+]
+```
+
+### Response field reference
+
+See [The EmailTemplate object](#the-emailtemplate-object) — each array item uses the same shape.
+
+<Note>
+  **For the scheduling selector, use the other endpoint.** The UI that lets users pick a template when creating a reminder or follow-up calls `GET /notifications/templates`, which only returns active templates. See [Reminders & Follow-ups](/api/notifications/overview).
+</Note>
+
+---
+
+## GET /templates/:id
+
+Retrieve a single template by ID. Returns the template regardless of its `activo` value.
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  Template identifier.
+</ParamField>
+
+### Example request
+
+```bash
+curl -X GET \
+  'https://api.bioactiva.com/templates/12' \
+  -H 'Authorization: Bearer <token>'
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "id": 12,
+  "nombre": "Recordatorio de reunión",
+  "asunto": "Recordatorio: reunión programada",
+  "cuerpo": "<p>Hola, recuerda tu reunión del {{fecha}}.</p>",
+  "activo": true,
+  "createdAt": "2026-06-09T14:32:10.000Z",
+  "updatedAt": "2026-06-09T14:32:10.000Z"
+}
+```
+
+### Response field reference
+
+See [The EmailTemplate object](#the-emailtemplate-object).
+
+### Errors
+
+| Status | When |
+| --- | --- |
+| `404` | No template exists with the given `id`. |
+
+---
+
+## PATCH /templates/:id
+
+Update one or more fields of an existing template, or deactivate it. All body fields are optional — send only the fields you want to change.
+
+To **deactivate** a template (so it disappears from the scheduling selector) send `{ "activo": false }`. Existing scheduled notifications are unaffected because they hold their own copy of subject and body.
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  Template identifier.
+</ParamField>
+
+### Body parameters
+
+<ParamField body="nombre" type="string">
+  New unique name. **1–100 characters.** Returns `409` if another template already uses this name.
+</ParamField>
+
+<ParamField body="asunto" type="string">
+  New email subject. **1–255 characters.**
+</ParamField>
+
+<ParamField body="cuerpo" type="string">
+  New HTML body.
+</ParamField>
+
+<ParamField body="activo" type="boolean">
+  Set to `false` to hide the template from the scheduling selector, or `true` to re-activate it.
+</ParamField>
+
+### Example request
+
+```bash
+curl -X PATCH \
+  'https://api.bioactiva.com/templates/12' \
+  -H 'Authorization: Bearer <token>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "asunto": "Recordatorio: reunión confirmada",
+    "activo": false
+  }'
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "id": 12,
+  "nombre": "Recordatorio de reunión",
+  "asunto": "Recordatorio: reunión confirmada",
+  "cuerpo": "<p>Hola, recuerda tu reunión del {{fecha}}.</p>",
+  "activo": false,
+  "createdAt": "2026-06-09T14:32:10.000Z",
+  "updatedAt": "2026-06-09T15:02:48.000Z"
+}
+```
+
+### Response field reference
+
+See [The EmailTemplate object](#the-emailtemplate-object).
+
+### Errors
+
+| Status | When |
+| --- | --- |
+| `404` | No template exists with the given `id`. |
+| `409` | The submitted `nombre` is already taken by another template. |
+
+---
+
+## DELETE /templates/:id
+
+Permanently delete a template. Use this only for templates that have **never** been used to schedule a notification — otherwise, **deactivate** it instead with `PATCH /templates/:id` and `{ "activo": false }`.
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  Template identifier.
+</ParamField>
+
+### Example request
+
+```bash
+curl -X DELETE \
+  'https://api.bioactiva.com/templates/12' \
+  -H 'Authorization: Bearer <token>'
+```
+
+### Response — `204 No Content`
+
+Empty body on success.
+
+### Errors
+
+| Status | When |
+| --- | --- |
+| `404` | No template exists with the given `id`. |
+| `409` | The template is associated with one or more notifications. Server message: `"No se puede eliminar la plantilla porque está asociada a una notificación. Desactívela en su lugar."` Deactivate the template instead. |
+
+---
+
+## Common errors
+
+| Status | When |
+| --- | --- |
+| `400` | Validation failed — required fields missing, wrong types, or values outside allowed length. |
+| `401` | Missing or invalid JWT. See [Authentication](/authentication). |
+| `404` | Template not found. |
+| `409` | Conflict — duplicated `nombre`, or template still in use by a notification. |
+
+See [Errors](/errors) for the full error response shape.

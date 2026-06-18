@@ -1,0 +1,52 @@
+---
+title: "Contacts: People and Points of Contact in the CRM"
+sidebarTitle: "Contacts"
+description: "Contacts are the individuals within organizations in Bioactiva CRM. Learn how to create, update, link contacts to leads, and manage email status."
+---
+
+A contact is a person associated with an organization. Contacts represent the human points of contact inside a company — the individuals you communicate with during the sales process. You can link a contact to a lead, giving you a clear record of who you are engaging with for each opportunity.
+
+Each contact supports two email addresses and carries an `estado_correo` field that tracks whether their primary email is currently active.
+
+## Key Fields
+
+| Field | Type | Description |
+|---|---|---|
+| `nombres` | string (required) | First name(s) |
+| `apellidos` | string | Last name(s) |
+| `vocativo` | enum | Honorific: `SR`, `SRA`, `SRTA` |
+| `cargo` | string | Job title |
+| `correo` | email (required) | Primary email — must be unique system-wide |
+| `correo2` | email | Secondary email — must be unique system-wide |
+| `telefono` | string | Phone number |
+| `idOrganizacion` | UUID (required) | The organization this contact belongs to |
+| `estado_correo` | enum | `VIGENTE` (active) or `VENCIDO` (lapsed) |
+| `comentarios` | string | Free-text notes about the contact |
+
+## Email Uniqueness
+
+Both `correo` and `correo2` must be unique across all contacts in the system. If you attempt to create or update a contact with an email address already registered to another contact, the API returns `409 Conflict`.
+
+<Warning>
+  This uniqueness constraint applies system-wide — not just within an organization. Make sure you are not duplicating an email address that belongs to a contact in a different organization.
+</Warning>
+
+## estado_correo
+
+When you create a contact, their `estado_correo` defaults to `VIGENTE`. This field indicates whether the contact's primary email address is considered active and reachable.
+
+Only contacts with `estado_correo = VIGENTE` can be linked to a lead. If you attempt to associate a `VENCIDO` contact with a new or updated lead, the API returns `400 Bad Request`.
+
+<Note>
+  The `estado_correo` field is informational in nature and reflects whether the contact's email relationship is current. Linking a contact to a lead always validates this status at the time of the request.
+</Note>
+
+## Author Attribution
+
+When you create a contact, the `idAuthor` field is derived automatically from your bearer token. You do not supply it in the request body — the API captures it from the authenticated user making the request.
+
+<CardGroup cols={1}>
+  <Card title="Contacts API Overview" icon="address-book" href="/api/contacts/overview">
+    Explore all contact endpoints: create, list, retrieve by organization, and update.
+  </Card>
+</CardGroup>

@@ -1,0 +1,97 @@
+---
+title: "Enable or Disable a User Account"
+sidebarTitle: "Enable / Disable"
+description: "PATCH /users/:id/enable and PATCH /users/:id/disable — activate or suspend a user account. Requires ADMINISTRADOR role."
+---
+
+Two endpoints let administrators suspend and reactivate user accounts without deleting them. Disabling a user revokes their access immediately; enabling them restores it. Neither operation removes any data.
+
+---
+
+## PATCH /users/:id/disable
+
+Sets the target user's status to `SUSPENDIDO`. The user loses the ability to authenticate as soon as the request completes.
+
+### Authentication
+
+A valid JWT is required. The authenticated user must hold the `ADMINISTRADOR` role.
+
+### Path Parameter
+
+<ParamField path="id" type="number" required>
+  The numeric ID of the user account you want to disable. Must be at least `1`.
+</ParamField>
+
+### Example Request
+
+```http
+PATCH /users/7/disable
+Authorization: Bearer <token>
+```
+
+### Response — 204 No Content
+
+The server returns `204 No Content` with an empty body when the operation succeeds.
+
+### Error Responses
+
+| Status | When |
+|---|---|
+| `401 Unauthorized` | No valid JWT was provided, or the token has expired. |
+| `403 Forbidden` | The authenticated user does not hold the `ADMINISTRADOR` role. |
+| `404 Not Found` | No user exists with the provided `id`. |
+| `409 Conflict` | The administrator attempted to disable their own account, or the user is already in a disabled state. |
+
+<Warning>
+  You cannot disable your own administrator account. Attempting to do so returns a `409 Conflict` error: `"Un administrador no puede deshabilitar su propia cuenta"`. Use a separate administrator account to perform this action if needed.
+</Warning>
+
+---
+
+## PATCH /users/:id/enable
+
+Sets the target user's status to `ACTIVO`. The user regains the ability to authenticate immediately.
+
+### Authentication
+
+A valid JWT is required. The authenticated user must hold the `ADMINISTRADOR` role.
+
+### Path Parameter
+
+<ParamField path="id" type="number" required>
+  The numeric ID of the user account you want to enable. Must be at least `1`.
+</ParamField>
+
+### Example Request
+
+```http
+PATCH /users/7/enable
+Authorization: Bearer <token>
+```
+
+### Response — 204 No Content
+
+The server returns `204 No Content` with an empty body when the operation succeeds.
+
+### Error Responses
+
+| Status | When |
+|---|---|
+| `401 Unauthorized` | No valid JWT was provided, or the token has expired. |
+| `403 Forbidden` | The authenticated user does not hold the `ADMINISTRADOR` role. |
+| `404 Not Found` | No user exists with the provided `id`. |
+| `409 Conflict` | The user is already in an enabled (`ACTIVO`) state. |
+
+---
+
+## Quick Reference
+
+| Endpoint | Effect | Success Response |
+|---|---|---|
+| `PATCH /users/:id/disable` | Sets status → `SUSPENDIDO` | `204 No Content` |
+| `PATCH /users/:id/enable` | Sets status → `ACTIVO` | `204 No Content` |
+
+<Note>
+  These endpoints only change account status — they do not delete users or modify any other account data.
+  To view updated status after either call, use [`GET /users`](/api/users/list).
+</Note>

@@ -1,0 +1,91 @@
+---
+title: "Activities: Tracking Sales Interactions with Leads"
+sidebarTitle: "Activities"
+description: "Activities record commercial interactions — meetings, calls, and emails — linked to a lead in Bioactiva CRM, with optional Outlook and Teams sync."
+---
+
+An activity represents a specific commercial interaction associated with a lead. Use activities to log every meaningful touchpoint in your sales process — whether that is a discovery call, a follow-up meeting, an email exchange, or any other interaction.
+
+Each activity has a start and end time, a responsible user, and optional notes. You can optionally sync activities to Microsoft Outlook Calendar and create Teams meeting links directly from the CRM.
+
+<Note>
+  The `notas` field serves as the comments and log for an activity. There is no separate comments entity — all notes and observations belong to this single field.
+</Note>
+
+## Activity Lifecycle
+
+Every activity starts in `PENDIENTE` when you create it. From there, you advance it by calling the dedicated state transition endpoints.
+
+```
+PENDIENTE → REALIZADA  (via PATCH /activities/:id/complete)
+          ↘ CANCELADA  (via PATCH /activities/:id/cancel)
+```
+
+| Status | Meaning |
+|---|---|
+| `PENDIENTE` | The activity is scheduled and awaiting completion. Initial state. |
+| `REALIZADA` | The activity was completed. Terminal — no further changes allowed. |
+| `CANCELADA` | The activity was cancelled. Terminal — no further changes allowed. |
+
+<Warning>
+  `REALIZADA` and `CANCELADA` are terminal states. Once an activity reaches either of these states, you cannot modify it or change its status again.
+</Warning>
+
+Only **one activity per lead** can be in `PENDIENTE` at a time. If you try to create a new activity for a lead that already has one pending, the API returns `409 Conflict`.
+
+## Activity Types
+
+| Type | Description |
+|---|---|
+| `REUNION` | An in-person or virtual meeting |
+| `LLAMADA` | A phone or video call |
+| `EMAIL` | An email exchange |
+| `OTRO` | Any other type of interaction |
+
+## Key Fields
+
+| Field | Description |
+|---|---|
+| `nombreActividad` | Name or title of the activity |
+| `tipo` | Activity type: `REUNION`, `LLAMADA`, `EMAIL`, or `OTRO` |
+| `estado` | Current status of the activity |
+| `fechaInicio` | Start datetime in ISO 8601 format |
+| `fechaFin` | End datetime in ISO 8601 format. Must be after `fechaInicio` |
+| `notas` | Notes and comments for the activity |
+| `idLead` | The lead this activity belongs to |
+| `idResponsable` | User responsible for carrying out the activity |
+| `outlookEventId` | Outlook calendar event ID, if the activity was synced |
+| `teamsMeetingUrl` | Microsoft Teams meeting URL, if one was created |
+
+## Microsoft Sync
+
+You can optionally sync an activity to Microsoft Outlook Calendar by setting `syncWithMicrosoft: true` when creating it. Sync is **unidirectional**: the CRM pushes to Microsoft — changes made in Outlook are never pulled back into the CRM.
+
+**Key sync behaviors:**
+
+- If the responsible user (`idResponsable`) does not have a Microsoft account connected to the CRM, the activity is created normally with `outlookEventId: null` and `teamsMeetingUrl: null`. No error is thrown.
+- If `syncWithMicrosoft` is omitted or set to `false`, no calendar event is created.
+- When you update an activity (via `PATCH /activities/:id`), changes to `nombreActividad`, `fechaInicio`, `fechaFin`, and `notas` are propagated to the Outlook event automatically — but only if the activity already has an `outlookEventId`.
+- When you cancel an activity (via `PATCH /activities/:id/cancel`), the linked Outlook event is deleted and `outlookEventId`/`teamsMeetingUrl` are cleared.
+- Completing an activity (via `PATCH /activities/:id/complete`) does **not** interact with Microsoft.
+
+<Tip>
+  A Microsoft Teams meeting link is only generated when **all three conditions** are met: `tipo` is `REUNION`, `syncWithMicrosoft` is `true`, and `createTeamsMeeting` is `true`. Additionally, the responsible user's Microsoft account must be a work or school (Azure AD) account with a Teams license. Personal Microsoft accounts (outlook.com, hotmail.com) will create the Outlook event but `teamsMeetingUrl` will be `null`.
+</Tip>
+
+<Note>
+  Microsoft errors never block or roll back CRM operations. If a Graph API call fails, the activity is still created or updated successfully — the error is logged internally and `outlookEventId`/`teamsMeetingUrl` will be `null` in the response.
+</Note>
+
+## Soft Delete
+
+Deleting an activity via `DELETE /activities/:id` performs a soft delete. The record is logically deleted and excluded from all subsequent list and detail queries. The activity is not physically removed from the database.
+
+<CardGroup cols={2}>
+  <Card title="Activities API Overview" icon="calendar" href="/api/activities/overview">
+    Explore all activity endpoints: create, list, retrieve, update, and delete.
+  </Card>
+  <Card title="Activity Lifecycle" icon="arrow-right-arrow-left" href="/api/activities/lifecycle">
+    Learn how to complete and cancel activities via the state transition endpoints.
+  </Card>
+</CardGroup>

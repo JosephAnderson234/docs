@@ -1,0 +1,154 @@
+---
+title: "Excel Export — Organizaciones, Contactos, Leads, Cotizaciones"
+sidebarTitle: "Export (Excel)"
+description: "Exporta datos del CRM como libros .xlsx. Filtros opcionales por nombre, RUC, sector, tipo, tamaño, estado, etc. Devuelve binario con nombre en Content-Disposition."
+---
+
+Descarga datos del CRM como libros de Excel (`.xlsx`). Todos los endpoints devuelven un binario con MIME `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` y el nombre del archivo en el header `Content-Disposition` (expuesto vía CORS).
+
+**Authentication:** Bearer JWT required (`Authorization: Bearer <token>`).
+
+<Note>
+  **Reglas comunes de filtros**
+
+  - **Filtros de texto** (`nombre`, `ruc`, `correo`, `organizacion`, `servicio`, `cliente`) son **"contiene"**, sin distinguir mayúsculas/acentos.
+  - **Filtros de enum** (`sector`, `tipo`, `tamano`, `estado`) aceptan **tanto la etiqueta en español** (`"Agrícola"`, `"Empresa nacional"`, `"En proceso"`) **como el valor del enum** (`"AGRICOLA"`, `"EMPRESA_NACIONAL"`, `"OFERTADO"`).
+  - Valor de enum no reconocido = **el filtro se ignora** (no devuelve error).
+  - La respuesta es un binario; descarga como `blob` y lee `Content-Disposition` para el nombre del archivo.
+</Note>
+
+---
+
+## GET /data/export/organizaciones
+
+Exporta organizaciones a `.xlsx`.
+
+### Query parameters
+
+<ParamField query="nombre" type="string">
+  Coincidencia parcial sobre `nombre` o `nombre comercial`.
+</ParamField>
+
+<ParamField query="ruc" type="string">
+  Coincidencia parcial sobre RUC.
+</ParamField>
+
+<ParamField query="sector" type="string">
+  Filtra por sector. Acepta etiqueta (`"Agrícola"`) o valor del enum (`"AGRICOLA"`).
+</ParamField>
+
+<ParamField query="tipo" type="string">
+  Filtra por tipo. Acepta etiqueta (`"Empresa nacional"`) o valor del enum (`"EMPRESA_NACIONAL"`).
+</ParamField>
+
+<ParamField query="tamano" type="string">
+  Filtra por tamaño. Acepta etiqueta o valor del enum.
+</ParamField>
+
+<ParamField query="includeDeleted" default="false" type="boolean">
+  Si es `true`, incluye también organizaciones desactivadas y las **resalta** en el archivo.
+</ParamField>
+
+### Example request
+
+```bash
+curl -X GET \
+  'https://api.bioactiva.com/data/export/organizaciones?sector=Agr%C3%ADcola&includeDeleted=true' \
+  -H 'Authorization: Bearer <token>' \
+  -o organizaciones.xlsx
+```
+
+### Response — `200 OK`
+
+- **Content-Type:** `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+- **Content-Disposition:** `attachment; filename="organizaciones-2026-06-15.xlsx"`
+- **Body:** binario `.xlsx`.
+
+---
+
+## GET /data/export/contactos
+
+Exporta contactos a `.xlsx`.
+
+### Query parameters
+
+### Example request
+
+```bash
+curl -X GET \
+  'https://api.bioactiva.com/data/export/contactos?organizacion=BioGreen' \
+  -H 'Authorization: Bearer <token>' \
+  -o contactos.xlsx
+```
+
+---
+
+## GET /data/export/leads
+
+Exporta leads a `.xlsx`.
+
+### Query parameters
+
+<ParamField query="estado" type="string">
+  Estado del lead. Acepta etiqueta (`"En proceso"`) o valor del enum (`"OFERTADO"`, `"EN_PROSPECTO"`, etc.).
+</ParamField>
+
+<Note>
+  **Columna "Historial de contacto" (derivada).** Esta columna se mantiene en el export, pero ahora es de **solo lectura** y se **arma a partir de las actividades del lead** — no proviene de un campo editable del Lead. Cada celda contiene una línea por actividad, en orden cronológico, con el formato:
+
+  ```text
+  [YYYY-MM-DD] <nombre de la actividad> — <estado> — <notas>
+  ```
+
+  Si el lead no tiene actividades, la celda queda vacía. Para registrar nuevas interacciones, usá la [Activities API](/api/activities/overview) o la columna **"Próxima actividad"** de la plantilla de import.
+</Note>
+
+---
+
+## GET /data/export/cotizaciones
+
+Exporta cotizaciones a `.xlsx`.
+
+### Query parameters
+
+<ParamField query="estado" type="string">
+  Estado de la cotización. Acepta etiqueta o valor del enum.
+</ParamField>
+
+---
+
+## GET /data/export/all
+
+Devuelve un **libro único `.xlsx` con 4 hojas**: Organizaciones, Contactos, Leads, Cotizaciones.
+
+### Query parameters
+
+<ParamField query="includeDeleted" default="false" type="boolean">
+  Si es `true`, incluye también registros desactivados (resaltados en cada hoja).
+</ParamField>
+
+### Example request
+
+```bash
+curl -X GET \
+  'https://api.bioactiva.com/data/export/all?includeDeleted=true' \
+  -H 'Authorization: Bearer <token>' \
+  -o bioactiva-export.xlsx
+```
+
+### Response — `200 OK`
+
+- **Content-Type:** `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+- **Content-Disposition:** `attachment; filename="bioactiva-export-2026-06-15.xlsx"`
+- **Body:** binario `.xlsx` con 4 hojas.
+
+---
+
+## Errores
+
+| Status | When |
+| --- | --- |
+| `401` | Falta o es inválido el token Bearer |
+| `500` | Error al generar el archivo Excel |
+
+Ver [Errors](/errors) para el envelope completo.

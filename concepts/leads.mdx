@@ -1,0 +1,73 @@
+---
+title: "Leads: Managing Sales Opportunities in Bioactiva CRM"
+sidebarTitle: "Leads"
+description: "Leads represent sales opportunities in Bioactiva CRM. Learn how the lead pipeline works, status transitions, and how to manage them via the API."
+---
+
+A lead is the core entity of the Bioactiva CRM. Each lead belongs to an organization, optionally links to a contact, and has a designated responsible user (`idEncargado`). As you work an opportunity, the lead progresses through a pipeline of statuses that reflects where it stands in the sales cycle.
+
+## Lead Status Lifecycle
+
+Every lead starts at `EN_PROSPECTO` when you create it. From there, you advance it manually using `PATCH /leads/:id/status`, except when a quotation is accepted or rejected — in those cases the status changes automatically and atomically as part of the quotation transition.
+
+```
+EN_PROSPECTO → OFERTADO → CIERRE_CON_VENTA
+                        ↘ CIERRE_SIN_VENTA
+```
+
+| Status | Meaning |
+|---|---|
+| `EN_PROSPECTO` | Initial state. The lead is being prospected. |
+| `OFERTADO` | A proposal or offer has been presented to the client. |
+| `CIERRE_CON_VENTA` | The deal closed successfully. Set automatically when a linked quotation is accepted. |
+| `CIERRE_SIN_VENTA` | The deal closed without a sale. Set automatically when a linked quotation is rejected. |
+
+<Note>
+  The `ultimoCambioEstado` field records the ISO 8601 timestamp of every status change — whether triggered manually via `PATCH /leads/:id/status` or automatically by a quotation transition.
+</Note>
+
+## Key Fields
+
+| Field | Type | Description |
+|---|---|---|
+| `servicioInteres` | string | The service or product the lead is interested in |
+| `idOrg` | UUID | Organization this lead belongs to |
+| `idContacto` | number (optional) | Contact person linked to this lead |
+| `idEncargado` | number | User responsible for the lead |
+| `canalCaptacion` | string (optional) | How the lead was acquired (e.g., `LinkedIn`) |
+| `desafioOportunidad` | string (optional) | The challenge or opportunity identified |
+| `ultimoCambioEstado` | ISO 8601 date | When the status last changed |
+
+## Contact Validation
+
+When you provide `idContacto`, the API enforces three rules before saving:
+
+1. **The contact must exist** in the system.
+2. **The contact must belong to the same organization** as the lead (`idOrg`).
+3. **The contact must have `estado_correo = VIGENTE`** — lapsed contacts cannot be linked to leads.
+
+If any of these conditions fails, the API returns `400 Bad Request` with a `LeadContactInvalidException`.
+
+To unlink an existing contact from a lead, send `"idContacto": null` in your `PATCH /leads/:id` request body.
+
+## Soft Delete
+
+Deleting a lead via `DELETE /leads/:id` performs a soft delete — the record is logically deleted but never physically removed from the database. Soft-deleted leads are excluded from all list and detail queries automatically.
+
+<Warning>
+  Soft-deleting a lead does **not** delete its associated activities or quotations. Those records remain accessible through their own modules and retain their current state.
+</Warning>
+
+## Related Resources
+
+- [Activities](/concepts/activities) — track meetings, calls, and emails linked to this lead.
+- [Quotations](/concepts/quotations) — manage commercial proposals that can close this lead.
+
+<CardGroup cols={2}>
+  <Card title="Leads API Overview" icon="list" href="/api/leads/overview">
+    Explore all lead endpoints: create, list, retrieve, update, and delete.
+  </Card>
+  <Card title="Lead Status Transitions" icon="arrow-right-arrow-left" href="/api/leads/status">
+    Learn how to advance a lead through its pipeline states.
+  </Card>
+</CardGroup>

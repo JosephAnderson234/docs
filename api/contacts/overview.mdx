@@ -1,0 +1,376 @@
+---
+title: "Contacts API — Manage People in Organizations"
+sidebarTitle: "Contacts"
+description: "CRUD endpoints for contacts in Bioactiva CRM. Create contacts linked to organizations, list them, update details, and filter by organization."
+---
+
+Use the Contacts API to manage the people associated with organizations in your Bioactiva CRM. You can create contact records tied to a specific organization, retrieve them individually or in bulk, filter by organization, and update details at any time. All endpoints require a valid JWT.
+
+<Note>
+  The `idAuthor` field on every contact is derived automatically from your JWT. Do not include it in the request body.
+</Note>
+
+---
+
+## POST /contacts
+
+Create a new contact and link them to an organization.
+
+**Authentication**: JWT required. Pass your access token as `Authorization: Bearer <token>`.
+
+### Request body
+
+<ParamField body="nombres" type="string" required>
+  The contact's first name(s). Maximum 90 characters.
+</ParamField>
+
+<ParamField body="apellidos" type="string">
+  The contact's last name(s). Optional — accepts up to 90 characters. No minimum length.
+</ParamField>
+
+<ParamField body="vocativo" type="enum">
+  Honorific for addressing the contact. Accepted values: `SR`, `SRA`, `SRTA`.
+</ParamField>
+
+<ParamField body="cargo" type="string">
+  The contact's job title within their organization. Optional — accepts up to 120 characters. May be omitted, `null`, or an empty string `""`; an empty string is stored as `null`. No minimum length.
+</ParamField>
+
+<ParamField body="correo" type="string (email)" required>
+  The contact's primary email address. Maximum 254 characters. Must be unique across all contacts in the system.
+</ParamField>
+
+<ParamField body="telefono" type="string">
+  The contact's phone number in **international format**. Optional — when supplied it must start with `+`, followed by the country code and the subscriber number. Spaces are allowed; other characters are not. Pattern: `^\+\d[\d\s]*$`. Maximum 20 characters.
+
+  - Valid: `"+51987654321"`, `"+1 555 123 4567"`
+  - Invalid: `"987654321"`, `"(51)9..."`, `"+"`
+</ParamField>
+
+<ParamField body="correo2" type="string (email)">
+  A secondary email address for the contact. Optional — accepts up to 254 characters. Must be unique across all contacts in the system. No minimum length.
+</ParamField>
+
+<ParamField body="comentarios" type="string">
+  Free-text notes about the contact. Optional — accepts up to 500 characters. No minimum length.
+</ParamField>
+
+<ParamField body="idOrganizacion" type="string (UUID)" required>
+  The UUID of the organization this contact belongs to.
+</ParamField>
+
+### Request example
+
+```json
+{
+  "nombres": "María",
+  "apellidos": "García",
+  "vocativo": "SRA",
+  "cargo": "Gerente Comercial",
+  "correo": "maria.garcia@empresa.com",
+  "telefono": "+51 987654321",
+  "idOrganizacion": "123e4567-e89b-12d3-a456-426614174000"
+}
+```
+
+### Response
+
+**`201 Created`** — Returns the newly created contact object.
+
+```json
+{
+  "id": 1,
+  "nombres": "María",
+  "apellidos": "García",
+  "vocativo": "SRA",
+  "cargo": "Gerente Comercial",
+  "correo": "maria.garcia@empresa.com",
+  "telefono": "+51 987654321",
+  "correo2": null,
+  "comentarios": null,
+  "estado_correo": "VIGENTE",
+  "idOrganizacion": "123e4567-e89b-12d3-a456-426614174000",
+  "organizacionNombre": "TechCorp S.A.C.",
+  "idAuthor": 3,
+  "createdAt": "2025-05-27T12:00:00.000Z"
+}
+```
+
+### Errors
+
+| Status | `kind` | When |
+| --- | --- | --- |
+| `400 Bad Request` | `validation` | DTO validation failed (e.g. `correo` is not a valid email, an optional field exceeds its maximum length, or a required field is missing). |
+| `400 Bad Request` | `validation` | `telefono` does not match the international format: `'El teléfono debe tener formato internacional: "+" seguido del código de país y el número, p. ej. +51987654321.'` |
+| `409 Conflict` | `conflict` | The value supplied for `correo` or `correo2` already exists on another contact. |
+
+<Note>
+  Form-field validation errors (`kind: validation`) are returned in **Spanish**. Only `nombres`, `correo`, and `idOrganizacion` are required. Optional fields (`apellidos`, `cargo`, `correo2`, `comentarios`) enforce a maximum length only — there is no minimum length. `telefono` is also optional, but when supplied it must match the international format described above.
+</Note>
+
+**`400 Bad Request`** — DTO validation failed (messages returned in Spanish):
+
+```json
+{
+  "statusCode": 400,
+  "kind": "validation",
+  "message": [
+    "El cargo no debe superar los 120 caracteres.",
+    "El correo principal no es válido.",
+    "El teléfono debe tener formato internacional: \"+\" seguido del código de país y el número, p. ej. +51987654321."
+  ],
+  "path": "/contacts",
+  "timestamp": "2026-06-04T10:30:00.000Z"
+}
+```
+
+---
+
+## GET /contacts
+
+Retrieve a paginated list of contacts. Supports filtering by organization and full-text search across the most common fields.
+
+**Authentication**: JWT required.
+
+### Query parameters
+
+<ParamField query="idOrganization" type="string (UUID)">
+  Filter the results to contacts that belong to the given organization.
+</ParamField>
+
+<ParamField query="search" type="string">
+  Case-insensitive text search applied to `nombres`, `apellidos`, `correo`, and `cargo`. Length 1–100 characters.
+</ParamField>
+
+<ParamField query="page" default="1" type="integer">
+  Page number to retrieve. Must be `≥ 1`.
+</ParamField>
+
+<ParamField query="limit" default="10" type="integer">
+  Number of contacts per page. Must be `≥ 1`.
+</ParamField>
+
+### Request example
+
+```http
+GET /contacts?idOrganization=550e8400-e29b-41d4-a716-446655440000&page=1&limit=10
+Authorization: Bearer <token>
+```
+
+### Response
+
+**`200 OK`** — Returns a paginated object containing the matching contacts and pagination metadata.
+
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "nombres": "María",
+      "apellidos": "García",
+      "vocativo": "SRA",
+      "cargo": "Gerente Comercial",
+      "correo": "maria.garcia@empresa.com",
+      "telefono": "+51 987654321",
+      "correo2": null,
+      "comentarios": null,
+      "estado_correo": "VIGENTE",
+      "idOrganizacion": "550e8400-e29b-41d4-a716-446655440000",
+      "organizacionNombre": "TechCorp S.A.C.",
+      "idAuthor": 3,
+      "createdAt": "2025-05-27T12:00:00.000Z"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "limit": 10,
+    "total": 50,
+    "totalPages": 5
+  }
+}
+```
+
+<ResponseField name="data" type="ContactResponseDto[]">
+  Array of contact objects for the current page. Each item follows the same shape documented in the [Response field reference](#response-field-reference) below.
+</ResponseField>
+
+<ResponseField name="meta.page" type="number">
+  The page number returned (echoes the `page` query param, defaulting to `1`).
+</ResponseField>
+
+<ResponseField name="meta.limit" type="number">
+  The page size used (echoes the `limit` query param, defaulting to `10`).
+</ResponseField>
+
+<ResponseField name="meta.total" type="number">
+  Total number of contacts that match the applied filters across all pages.
+</ResponseField>
+
+<ResponseField name="meta.totalPages" type="number">
+  Total number of pages available given the current `limit`.
+</ResponseField>
+
+---
+
+## GET /contacts/organization/:idOrganizacion
+
+Retrieve all contacts that belong to a specific organization.
+
+<Note>
+  The same organization filter is now also available on [`GET /contacts`](#get-contacts) via the `idOrganization` query param. Prefer that endpoint when you need pagination or text search — this route returns the full (unpaginated) array and is kept for backwards compatibility.
+</Note>
+
+**Authentication**: JWT required.
+
+### Path parameters
+
+<ParamField path="idOrganizacion" type="string (UUID)" required>
+  The UUID of the organization whose contacts you want to list.
+</ParamField>
+
+### Response
+
+**`200 OK`** — Returns an array of contact objects belonging to the specified organization.
+
+---
+
+## GET /contacts/:id
+
+Retrieve a single contact by their numeric ID.
+
+**Authentication**: JWT required.
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  The numeric ID of the contact to retrieve.
+</ParamField>
+
+### Response
+
+**`200 OK`** — Returns the matching contact object.
+
+### Errors
+
+| Status | Description |
+| --- | --- |
+| `404 Not Found` | No contact with the given ID exists. |
+
+---
+
+## PATCH /contacts/:id
+
+Partially update an existing contact. Send only the fields you want to change — all body fields are optional.
+
+**Authentication**: JWT required.
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  The numeric ID of the contact to update.
+</ParamField>
+
+### Request body
+
+All fields are optional and follow the same validation rules as [`POST /contacts`](#post-contacts). In particular, when `telefono` is supplied it must use the international format (`+` followed by the country code and number) — see the [`POST /contacts` field reference](#post-contacts) for examples.
+
+<ParamField body="idOrganizacion" type="string (UUID)">
+  Reassign the contact to a different organization. When omitted, the contact stays linked to its current organization. When supplied with a value that differs from the current one, the contact is moved to the target organization. (Previously this field was ignored on `PATCH`; it is now honored.)
+
+  - The target organization must **exist** and be **active** (not soft-deleted). Otherwise the request is rejected with `404 Not Found` (`OrganizationNotFoundException`, _"Organización con id `<id>` no encontrada o desactivada"_).
+  - If the contact being moved was the **active contact** (`idContactoActivo`) of its previous organization, that reference is automatically cleared on the source organization.
+  - The contact's `estado_correo` is **not** modified by the move. Email-status changes are a manual decision driven by mail bounces and must be performed via [`PATCH /contacts/:id/estado-correo`](#patch-contacts-id-estado-correo).
+</ParamField>
+
+```json
+{
+  "cargo": "Directora Comercial",
+  "telefono": "+51 999888777",
+  "idOrganizacion": "9f4c1a72-1d2e-4b8a-8b1d-2c5e0a9b1234"
+}
+```
+
+### Response
+
+**`200 OK`** — Returns the updated contact object.
+
+### Errors
+
+| Status | `kind` | When |
+| --- | --- | --- |
+| `400 Bad Request` | `validation` | DTO validation failed (e.g. `correo` is not a valid email, an optional field exceeds its maximum length, or `telefono` does not match the international format). |
+| `404 Not Found` | `not_found` | No contact with the given ID exists, or the target `idOrganizacion` does not exist / is soft-deleted (`OrganizationNotFoundException`, _"Organización con id `<id>` no encontrada o desactivada"_). |
+| `409 Conflict` | `conflict` | The new email address supplied for `correo` or `correo2` is already in use on another contact. |
+
+<Note>
+  Form-field validation errors are returned in **Spanish**, matching the [`POST /contacts`](#post-contacts) behavior. Sending `cargo: ""` or `cargo: null` is valid and clears the field (stored as `null`).
+</Note>
+
+---
+
+## PATCH /contacts/:id/estado-correo
+
+Change a contact's email-status (`estado_correo`) between `VIGENTE` and `VENCIDO`. This is the **soft-delete** mechanism for contacts: contacts are never physically removed — only their `estado_correo` flag changes. The change is reversible in both directions.
+
+**Authentication**: JWT required.
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  The numeric ID of the contact to update.
+</ParamField>
+
+### Request body
+
+<ParamField body="estado_correo" type="enum" required>
+  New status for the contact. Accepted values: `VIGENTE`, `VENCIDO`.
+</ParamField>
+
+```json
+{ "estado_correo": "VENCIDO" }
+```
+
+### Response
+
+**`200 OK`** — Returns the updated contact object with the new `estado_correo` value.
+
+### Errors
+
+| Status | `error` | `kind` | When |
+| --- | --- | --- | --- |
+| `400 Bad Request` | — | `validation` | `estado_correo` is missing or not one of the allowed enum values. |
+| `404 Not Found` | `ContactNotFoundException` | `not_found` | No contact exists with the given `id`. |
+
+<Note>
+  **Soft-delete semantics**
+
+  - The contact is **never physically deleted**; only `estado_correo` changes.
+  - The transition is **reversible in both directions** (`VIGENTE ⇄ VENCIDO`), so a contact marked as `VENCIDO` can be reactivated at any time by sending `estado_correo: "VIGENTE"`.
+  - `GET /contacts` and `GET /contacts/organization/:idOrganizacion` continue to return **all** contacts regardless of `estado_correo`. Use the `estado_correo` field on each contact to filter or visually distinguish them on the frontend.
+  - A `VENCIDO` contact **cannot be linked to a lead**. Creating (`POST /leads`) or updating (`PATCH /leads/:id`) a lead with an `idContacto` whose contact is not `VIGENTE` is rejected by the backend with `LeadContactNotVigenteException` (`400`, _"El contacto no se encuentra vigente"_).
+</Note>
+
+---
+
+## Response field reference
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | `number` | Unique numeric ID of the contact. |
+| `nombres` | `string` | First name(s). |
+| `apellidos` | \`string | null\` | Last name(s). `null` if not provided. |
+| `vocativo` | \`string | null\` | Honorific (`SR`, `SRA`, or `SRTA`). `null` if not provided. |
+| `cargo` | \`string | null\` | Job title. `null` if not provided. |
+| `correo` | `string` | Primary email address. |
+| `telefono` | \`string | null\` | Phone number. `null` if not provided. |
+| `correo2` | \`string | null\` | Secondary email address. `null` if not provided. |
+| `comentarios` | \`string | null\` | Free-text notes. `null` if not provided. |
+| `estado_correo` | `string` | Email status. `VIGENTE` (active) or `VENCIDO` (expired). Initialized as `VIGENTE` on creation. |
+| `idOrganizacion` | `string (UUID)` | UUID of the organization this contact belongs to. |
+| `organizacionNombre` | `string` | Display name of the organization, resolved via a JOIN — no extra API call required. |
+| `idAuthor` | `number` | ID of the user who created this contact, taken from the JWT automatically. |
+| `createdAt` | `string (ISO 8601)` | Timestamp when the contact was created. |
+
+<Warning>
+  The `updatedAt` field is not included in contact responses.
+</Warning>

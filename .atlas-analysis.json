@@ -1,0 +1,168 @@
+{
+  "projectType": "api-service",
+  "projectName": "Bioactiva CRM API",
+  "projectDescription": "A CRM REST API that manages leads, contacts, organizations, activities, quotations, and user invitations with Microsoft 365 calendar integration.",
+  "theme": "luma",
+  "primaryColor": "#675ff1",
+  "lightColor": "#4c4979",
+  "darkColor": "#040405",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guide",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "authentication",
+              "errors"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/leads",
+              "concepts/organizations",
+              "concepts/contacts",
+              "concepts/activities",
+              "concepts/quotations"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/microsoft"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Authentication",
+            "pages": [
+              "api/auth/login",
+              "api/auth/refresh",
+              "api/auth/me",
+              "api/auth/reset-password"
+            ]
+          },
+          {
+            "group": "Users & Invitations",
+            "pages": [
+              "api/users/list",
+              "api/users/enable-disable",
+              "api/invitations/overview"
+            ]
+          },
+          {
+            "group": "Organizations",
+            "pages": [
+              "api/organizations/overview",
+              "api/organizations/sunat"
+            ]
+          },
+          {
+            "group": "Contacts",
+            "pages": [
+              "api/contacts/overview"
+            ]
+          },
+          {
+            "group": "Leads",
+            "pages": [
+              "api/leads/overview",
+              "api/leads/status"
+            ]
+          },
+          {
+            "group": "Activities",
+            "pages": [
+              "api/activities/overview",
+              "api/activities/lifecycle"
+            ]
+          },
+          {
+            "group": "Quotations",
+            "pages": [
+              "api/quotations/overview",
+              "api/quotations/lifecycle"
+            ]
+          },
+          {
+            "group": "Microsoft Integration",
+            "pages": [
+              "api/integrations/microsoft"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "JWT authentication with httpOnly refresh token cookies",
+    "Lead pipeline management with status tracking (EN_PROSPECTO → OFERTADO → CIERRE)",
+    "Commercial activity tracking with Outlook Calendar & Microsoft Teams sync",
+    "Quotation lifecycle management with atomic lead closing on accept/reject",
+    "Organization management with SUNAT (Peru tax authority) lookup",
+    "Contact management with multiple email addresses and organization association",
+    "Role-based access control (ADMINISTRADOR / TRABAJADOR)",
+    "Team invitation system with token-based onboarding",
+    "Password reset via one-time email token",
+    "Soft delete across all major entities",
+    "Pagination and filtering on all list endpoints"
+  ],
+  "publicApiSurface": [
+    "POST /auth/login",
+    "POST /auth/refresh",
+    "GET /auth/me",
+    "POST /reset-password/request",
+    "POST /reset-password/reset",
+    "POST /reset-password/validate",
+    "GET /users",
+    "PATCH /users/:id/disable",
+    "PATCH /users/:id/enable",
+    "POST /invitations",
+    "GET /invitations",
+    "GET /invitations/info/:token",
+    "POST /invitations/accept",
+    "DELETE /invitations/:id",
+    "POST /organizations",
+    "GET /organizations",
+    "GET /organizations/sunat/:query",
+    "GET /organizations/:id",
+    "PATCH /organizations/:id",
+    "POST /contacts",
+    "GET /contacts",
+    "GET /contacts/organization/:idOrganizacion",
+    "GET /contacts/:id",
+    "PATCH /contacts/:id",
+    "POST /leads",
+    "GET /leads",
+    "GET /leads/:id",
+    "PATCH /leads/:id",
+    "PATCH /leads/:id/status",
+    "DELETE /leads/:id",
+    "POST /activities",
+    "GET /activities",
+    "GET /activities/:id",
+    "PATCH /activities/:id",
+    "PATCH /activities/:id/complete",
+    "PATCH /activities/:id/cancel",
+    "DELETE /activities/:id",
+    "POST /quotations",
+    "GET /quotations",
+    "GET /quotations/:id",
+    "PATCH /quotations/:id",
+    "PATCH /quotations/:id/send",
+    "PATCH /quotations/:id/accept",
+    "PATCH /quotations/:id/reject",
+    "DELETE /quotations/:id",
+    "GET /microsoft/connect",
+    "GET /microsoft/callback",
+    "GET /microsoft/status",
+    "DELETE /microsoft/disconnect"
+  ]
+}

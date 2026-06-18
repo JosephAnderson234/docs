@@ -1,0 +1,82 @@
+---
+title: "POST /auth/refresh — Renew Your Access Token"
+sidebarTitle: "POST /auth/refresh"
+description: "Exchange a valid httpOnly refresh token cookie for a new JWT access token. The refresh token is rotated on each successful call."
+---
+
+Use this endpoint to obtain a new JWT access token using the `refreshToken` cookie that was set during login. You do not need to send any credentials or a request body — the browser or HTTP client attaches the cookie automatically. On success, you receive a fresh access token and a new rotated refresh token cookie.
+
+## Endpoint
+
+```text
+POST /auth/refresh
+```
+
+## Authentication
+
+None. This endpoint relies entirely on the `refreshToken` httpOnly cookie. No `Authorization` header is required.
+
+## Request
+
+No request body is required. The browser or HTTP client automatically sends the `refreshToken` cookie to `/auth/refresh` because the cookie is scoped to that path.
+
+## Response
+
+### `200 OK`
+
+```json
+{
+  "accessToken": "eyJhbGciOi...",
+  "accessTokenExpiresIn": 900
+}
+```
+
+<ResponseField name="accessToken" type="string">
+  A new signed JWT. Use this as `Authorization: Bearer <token>` on all subsequent requests to protected endpoints.
+</ResponseField>
+
+<ResponseField name="accessTokenExpiresIn" type="number">
+  Number of seconds until the new access token expires. Currently **900** (15 minutes).
+</ResponseField>
+
+Along with the JSON body, the server issues a **new** `refreshToken` httpOnly cookie, replacing the previous one. The cookie carries the same attributes as the one set by `POST /auth/login` — `httpOnly`, `sameSite: lax`, `path: /auth/refresh`, 7-day expiry, and `secure` in production.
+
+## Token Rotation
+
+Every successful call to this endpoint **invalidates the previous refresh token** and issues a brand-new one. This one-time-use design limits the window of exposure if a token is stolen:
+
+- If an attacker steals a refresh token and uses it first, the original token is revoked.
+- When the legitimate user's client tries to refresh with the now-revoked token, the request returns `401`, prompting a re-login.
+
+Never reuse an old refresh token after a successful refresh — it will be rejected.
+
+## Errors
+
+| Status | `message` | When |
+| --- | --- | --- |
+| `401` | `"No autorizado"` | No `refreshToken` cookie present, token is invalid, or token has expired (7-day maximum lifetime) |
+| `401` | `"La sesión ha expirado"` | The session was replaced by a more recent login on another device. Only one active session is allowed per account — the previous session is invalidated as soon as a new `POST /auth/login` succeeds for the same user. |
+
+```json
+{
+  "statusCode": 401,
+  "message": "No autorizado",
+  "error": "Unauthorized"
+}
+```
+
+```json
+{
+  "statusCode": 401,
+  "message": "La sesión ha expirado",
+  "error": "Unauthorized"
+}
+```
+
+<Note>
+  **Sesión única por cuenta.** Solo puede haber una sesión activa por usuario. Cuando esto ocurra, el cliente debe redirigir al usuario a la pantalla de login para iniciar sesión nuevamente.
+</Note>
+
+<Tip>
+  Call this endpoint whenever you receive a `401` on a protected request, then retry the original request with the new access token. This pattern keeps sessions alive seamlessly without prompting the user to log in again.
+</Tip>
