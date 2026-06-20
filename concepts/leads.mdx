@@ -48,8 +48,6 @@ When you provide `idContacto`, the API enforces three rules before saving:
 
 If any of these conditions fails, the API returns `400 Bad Request` with a `LeadContactInvalidException`.
 
-To unlink an existing contact from a lead, send `"idContacto": null` in your `PATCH /leads/:id` request body.
-
 ## Soft Delete
 
 Deleting a lead via `DELETE /leads/:id` performs a soft delete — the record is logically deleted but never physically removed from the database. Soft-deleted leads are excluded from all list and detail queries automatically.

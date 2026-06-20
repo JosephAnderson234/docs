@@ -224,24 +224,47 @@ Update one or more fields on an existing lead. All fields are optional — only 
 
 **Authentication:** Bearer JWT required.
 
-### Example request body
+### Request body
+
+<ParamField body="servicioInteres" type="string">
+  The service or product the prospect is interested in. Maximum 120 characters.
+</ParamField>
+
+<ParamField body="comentarios" type="string">
+  Additional notes about the lead. Maximum 500 characters.
+</ParamField>
+
+<ParamField body="desafioOportunidad" type="string">
+  Challenge or opportunity identified for this prospect. Maximum 500 characters.
+</ParamField>
+
+<ParamField body="canalCaptacion" type="string">
+  Acquisition channel through which the lead was sourced (e.g., `LinkedIn`, `Referral`). Maximum 60 characters.
+</ParamField>
+
+<ParamField body="idEncargado" type="number">
+  ID of the user responsible for this lead. Must exist.
+</ParamField>
+
+<Note>
+  La organización y el contacto se definen al crear el lead y no pueden modificarse posteriormente.
+</Note>
+
+### Example request
 
 ```json
 {
   "servicioInteres": "Cloud migration consulting",
-  "idContacto": null
+  "comentarios": "Updated priority — client aims to decide by end of month",
+  "canalCaptacion": "LinkedIn"
 }
 ```
-
-Sending `idContacto: null` unlinks the currently associated contact from the lead.
 
 ### Errors
 
 | Status | `error` | `kind` | When |
 | --- | --- | --- | --- |
-| `400` | — | `validation` | New contact does not exist or belongs to a different organization. |
-| `400` | `LeadContactNotVigenteException` | `validation` | New contact's `estado_correo` is `VENCIDO`. Message: _"El contacto no se encuentra vigente"_. |
-| `404` | — | `not_found` | Lead, new organization, or new responsible user not found. |
+| `404` | — | `not_found` | Lead or responsible user not found. |
 
 ### Response — `200 OK`
 

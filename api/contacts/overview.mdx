@@ -343,7 +343,7 @@ Change a contact's email-status (`estado_correo`) between `VIGENTE` and `VENCIDO
   - The contact is **never physically deleted**; only `estado_correo` changes.
   - The transition is **reversible in both directions** (`VIGENTE ⇄ VENCIDO`), so a contact marked as `VENCIDO` can be reactivated at any time by sending `estado_correo: "VIGENTE"`.
   - `GET /contacts` and `GET /contacts/organization/:idOrganizacion` continue to return **all** contacts regardless of `estado_correo`. Use the `estado_correo` field on each contact to filter or visually distinguish them on the frontend.
-  - A `VENCIDO` contact **cannot be linked to a lead**. Creating (`POST /leads`) or updating (`PATCH /leads/:id`) a lead with an `idContacto` whose contact is not `VIGENTE` is rejected by the backend with `LeadContactNotVigenteException` (`400`, _"El contacto no se encuentra vigente"_).
+  - A `VENCIDO` contact **cannot be linked to a lead**. Creating (`POST /leads`) a lead with an `idContacto` whose contact is not `VIGENTE` is rejected by the backend with `LeadContactNotVigenteException` (`400`, _"El contacto no se encuentra vigente"_).
 </Note>
 
 ---
