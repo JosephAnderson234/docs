@@ -19,6 +19,14 @@ The Bioactiva CRM API uses **JWT (JSON Web Token)** access tokens for authentica
   Esta política aplica a **toda la API** — no solo a los endpoints de autenticación.
 </Warning>
 
+<Note>
+  **Password policy.** All endpoints that create or change passwords (`POST /invitations/accept`, `PATCH /profile/password`, `POST /reset-password/reset`) enforce:
+
+  - Minimum length: **8 characters**. Maximum: **72**.
+  - Must include at least: one uppercase letter, one lowercase letter, one number, and one special character.
+  - If validation fails, the API responds `400 Bad Request` with the message `"La contraseña debe tener al menos 8 caracteres e incluir una letra mayúscula, una letra minúscula, un número y un carácter especial."` (or `"La contraseña no debe superar los 72 caracteres."` if the maximum is exceeded).
+</Note>
+
 ---
 
 ## Login

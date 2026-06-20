@@ -188,7 +188,7 @@ None. This endpoint is public.
 </ParamField>
 
 <ParamField body="password" type="string" required>
-  The password you want to set for the new account.
+  The password you want to set for the new account. Must follow the [password policy](/authentication#password-policy): 8–72 characters, with at least one uppercase letter, one lowercase letter, one number, and one special character.
 </ParamField>
 
 <ParamField body="confirmPassword" type="string" required>
@@ -239,6 +239,7 @@ The server also sets an `httpOnly` cookie named `refreshToken` with the followin
 | Status | When |
 | --- | --- |
 | `400 Bad Request` | `password` and `confirmPassword` do not match. |
+| `400 Bad Request` | `password` violates the [password policy](/authentication#password-policy) (e.g. too short, missing uppercase, missing special character, or exceeds 72 characters). |
 | `400 Bad Request` | The token is invalid, has already been used, or has expired. |
 | `400 Bad Request` | DTO validation failed (e.g. a required field is missing). |
 

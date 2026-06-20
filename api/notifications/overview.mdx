@@ -9,7 +9,7 @@ description: "Programa, consulta y cancela correos de recordatorio y seguimiento
 </Warning>
 
 <Warning>
-  **Breaking (recordatorios):** `POST /notifications/reminders` ya **no** acepta `fechaEnvio` (fecha absoluta). En su lugar recibe **`minutosAntes`** (entero `1–120`): minutos antes de que finalice la actividad en que se envía el recordatorio (máximo 2 horas antes).
+  **Breaking (recordatorios):** `POST /notifications/reminders` ya **no** acepta `fechaEnvio` (fecha absoluta). En su lugar recibe **`minutosAntes`** (entero ≥ 1): minutos antes de que finalice la actividad en que se envía el recordatorio. Ya **no hay tope máximo** (anteriormente estaba limitado a 120 minutos / 2 horas).
 </Warning>
 
 <Warning>
@@ -40,8 +40,8 @@ Programa un correo interno al encargado de la actividad activa del lead.
   El servidor resuelve la actividad activa del lead.
 </ParamField>
 
-<ParamField body="minutosAntes" type="integer (1–120)" required>
-  Minutos antes de que finalice la actividad en que se envía el recordatorio. Rango permitido **`1–120`** (máximo 2 horas antes). El servidor calcula la fecha/hora de envío como `fechaFin de la actividad − minutosAntes`.
+<ParamField body="minutosAntes" type="integer ≥ 1" required>
+  Minutos antes de que finalice la actividad en que se envía el recordatorio. Mínimo **1** minuto, **sin tope máximo**. El servidor calcula la fecha/hora de envío como `fechaFin − minutosAntes` y rechaza la solicitud si el instante resultante ya quedó en el pasado (la actividad finaliza demasiado pronto para esa antelación).
 </ParamField>
 
 <ParamField body="idTemplate" type="integer ≥ 1 | null">
@@ -98,7 +98,7 @@ Objeto `NotificationResponseDto` (ver [esquema](#esquema-notificationresponsedto
 }
 ```
 
-**Errores posibles:** `401` (sin token), `404` lead sin actividad activa, `409` notificación duplicada, `404` plantilla inexistente/inactiva, `400` `minutosAntes` fuera de `1–120`, `400` el envío calculado queda **en el pasado** porque la actividad finaliza demasiado pronto. Ver [tabla de errores](#errores).
+**Errores posibles:** `401` (sin token), `404` lead sin actividad activa, `409` notificación duplicada, `404` plantilla inexistente/inactiva, `400` `minutosAntes` menor que 1, `400` el envío calculado queda **en el pasado** porque la actividad finaliza demasiado pronto para esa antelación. Ver [tabla de errores](#errores).
 
 ---
 
@@ -504,7 +504,7 @@ Todas las respuestas de error usan el envelope:
 
 | statusCode | kind | Cuándo |
 | --- | --- | --- |
-| `400` | `Validation` | Body inválido, fecha fuera de rango, externo no posterior al interno, `correoCliente` no asociado al lead, `minutosAntes` fuera de `1–120`, o el envío calculado del recordatorio queda en el pasado |
+| `400` | `Validation` | Body inválido, fecha fuera de rango, externo no posterior al interno, `correoCliente` no asociado al lead, `minutosAntes` menor que 1, o el envío calculado del recordatorio queda en el pasado (la actividad finaliza demasiado pronto para esa antelación) |
 | `401` | `Unauthorized` | Falta o es inválido el token Bearer |
 | `404` | `NotFound` | **Lead sin actividad activa** (nuevo), o `idTemplate` enviado pero plantilla inexistente/inactiva |
 | `409` | `Conflict` | Ya existe una notificación `PROGRAMADA` para esa actividad, o se cancela una no programada |
