@@ -8,7 +8,7 @@ A lead is the core entity of the Bioactiva CRM. Each lead belongs to an organiza
 
 ## Lead Status Lifecycle
 
-Every lead starts at `EN_PROSPECTO` when you create it. From there, you advance it manually using `PATCH /leads/:id/status`, or automatically via quotation actions — creating a quotation promotes `EN_PROSPECTO` to `OFERTADO`, and accepting or rejecting one closes the lead atomically as part of the quotation lifecycle transition.
+Every lead starts at `EN_PROSPECTO` when you create it. From there, you advance it manually using `PATCH /leads/:id/status`, or automatically via quotation actions — creating a quotation promotes `EN_PROSPECTO` to `OFERTADO`, and accepting or rejecting one closes the lead atomically as part of the quotation lifecycle transition. The synchronization is bidirectional: changing the lead status also updates the linked quotation.
 
 ```
 EN_PROSPECTO → OFERTADO → CIERRE_CON_VENTA
@@ -18,9 +18,9 @@ EN_PROSPECTO → OFERTADO → CIERRE_CON_VENTA
 | Status | Meaning |
 |---|---|
 | `EN_PROSPECTO` | Initial state. The lead is being prospected. |
-| `OFERTADO` | A proposal or offer has been presented to the client. |
-| `CIERRE_CON_VENTA` | The deal closed successfully. Set automatically when a linked quotation is accepted. |
-| `CIERRE_SIN_VENTA` | The deal closed without a sale. Set automatically when a linked quotation is rejected. |
+| `OFERTADO` | A proposal or offer has been presented to the client. Moving a lead to this status creates or resets its quotation to `PENDIENTE`. |
+| `CIERRE_CON_VENTA` | The deal closed successfully. Set automatically when a linked quotation is accepted. Moving a lead to this status sets its quotation to `ACEPTADA`. |
+| `CIERRE_SIN_VENTA` | The deal closed without a sale. Set automatically when a linked quotation is rejected. Moving a lead to this status sets its quotation to `RECHAZADA`. |
 
 <Note>
   The `ultimoCambioEstado` field records the ISO 8601 timestamp of every status change — whether triggered manually via `PATCH /leads/:id/status` or automatically by a quotation transition.

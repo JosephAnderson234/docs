@@ -4,7 +4,7 @@ sidebarTitle: "Change Status"
 description: "Move a lead through the sales pipeline with enforced state transitions and conflict guards."
 ---
 
-Use this endpoint to change a lead status manually, following the backend state machine rules. The backend also syncs lead status with quotation outcomes: accepting a quotation moves the lead to `CIERRE_CON_VENTA`, and rejecting a quotation moves it to `CIERRE_SIN_VENTA`.
+Use this endpoint to change a lead status manually, following the backend state machine rules. The backend keeps the lead and its linked quotation in sync bidirectionally — quotation outcomes move the lead (see the quotation lifecycle), and lead status changes also cascade to the linked quotation (see Lead–Quotation synchronization below).
 
 ---
 
@@ -125,43 +125,69 @@ Any real transition is blocked while the lead still has unresolved pending activ
 
 ---
 
-## Quotation-driven synchronization
+## Lead–Quotation synchronization
 
-Lead status is synchronized with quotation decisions:
+The lead and its linked quotation (1:1 relationship) stay synchronized automatically. Synchronization works in both directions.
 
-- `PATCH /quotations/:id/accept` sets the linked lead to `CIERRE_CON_VENTA`.
-- `PATCH /quotations/:id/reject` sets the linked lead to `CIERRE_SIN_VENTA`.
+### Quotation → Lead
 
-These updates happen automatically; use `PATCH /leads/:id/status` for manual transitions that follow the same rules.
+When the quotation lifecycle endpoints are used, the linked lead is updated atomically in the same database transaction:
+
+| Quotation action | Effect on lead |
+|---|---|
+| `PATCH /quotations/:id/accept` → `ACEPTADA` | Lead moves to `CIERRE_CON_VENTA` |
+| `PATCH /quotations/:id/reject` → `RECHAZADA` | Lead moves to `CIERRE_SIN_VENTA` |
+
+### Lead → Quotation
+
+When you change the lead status via this endpoint, the linked quotation updates accordingly:
+
+| Lead status change | Effect on linked quotation |
+|---|---|
+| → `OFERTADO` | If no quotation exists, a draft `PENDIENTE` quotation is auto-generated. If a quotation already exists (e.g., reopening from a closed state), it is reset to `PENDIENTE`. |
+| → `CIERRE_CON_VENTA` | Quotation moves to `ACEPTADA`. |
+| → `CIERRE_SIN_VENTA` | Quotation moves to `RECHAZADA`. |
+
+### State mapping
+
+| Lead status | Quotation status |
+|---|---|
+| `OFERTADO` | `PENDIENTE` |
+| `CIERRE_CON_VENTA` | `ACEPTADA` |
+| `CIERRE_SIN_VENTA` | `RECHAZADA` |
+
+Lead statuses without an entry above (e.g. `EN_PROSPECTO`) have no corresponding quotation mapping.
+
+### Best-effort and guard bypass
+
+The lead→quotation sync is **best-effort**:
+
+- If the lead has no linked quotation (e.g. `AUTO_COTIZACION_ON_OFERTADO=false`), the lead status change still completes.
+- If synchronization fails for any reason, the lead status change is **not** reverted.
+
+Unlike quotation-driven transitions (accept/reject), the lead→quotation sync does **not** enforce the normal quotation state machine guards. Since the lead is the source of truth when the change originates there, a quotation in `ACEPTADA` can be moved directly to `RECHAZADA` if the lead transitions from `CIERRE_CON_VENTA` to `CIERRE_SIN_VENTA`, and vice versa.
+
+<Note>
+  **Auto-generated draft on `OFERTADO`** — The draft quotation is created in `PENDIENTE` and pre-filled from the lead and related entities:
+
+  | Quotation field | Source |
+  | --- | --- |
+  | `nombreServicio` | Lead's `servicioInteres`. |
+  | Cliente / dirigido | The lead's organization details (name, RUC, address, etc.). |
+  | Remitente | The lead's encargado (assigned user). |
+  | `monto` | Initial value `"0.00"` — editable afterwards. |
+  | `tipo` (moneda) | `PEN` — editable afterwards. |
+
+  **Behavior rules:**
+
+  - **Real transition only.** Generation only runs when `estado` actually changes to `OFERTADO`.
+  - **No duplicates.** If the lead already has a quotation, no new draft is created; instead, the existing quotation is reset to `PENDIENTE`.
+  - **Best-effort.** If draft generation fails, the lead status change is not reverted.
+  - **Configurable.** Controlled by `AUTO_COTIZACION_ON_OFERTADO` (enabled by default, disabled with `"false"`).
+</Note>
 
 ---
 
 ## `ultimoCambioEstado`
 
 Every successful status change updates `ultimoCambioEstado` to the current UTC timestamp.
-
----
-
-## Auto-generated draft quotation on `OFERTADO`
-
-When a lead transitions into `OFERTADO` (previous status different from `OFERTADO`), the backend automatically creates a draft quotation linked to that lead.
-
-The draft is created in status `PENDIENTE` and pre-filled from the lead and related entities:
-
-| Quotation field | Source |
-| --- | --- |
-| `nombreServicio` | Lead's `servicioInteres`. |
-| Cliente / dirigido | The lead's organization details (name, RUC, address, etc.). |
-| Remitente | The lead's encargado (assigned user). |
-| `monto` | Initial value `"0.00"` — editable afterwards. |
-| `tipo` (moneda) | `PEN` — editable afterwards. |
-
-<Note>
-  **Behavior rules**
-
-  - **Real transition only.** Generation only runs when `estado` actually changes to `OFERTADO`.
-  - **No duplicates.** If the lead already has at least one quotation (any status), no new draft is created.
-  - **Best-effort.** If draft generation fails, the lead status change is not reverted.
-  - **Editable.** The draft is a normal `PENDIENTE` quotation.
-  - **Configurable.** Controlled by `AUTO_COTIZACION_ON_OFERTADO` (enabled by default, disabled with `"false"`).
-</Note>

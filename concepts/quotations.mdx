@@ -4,7 +4,7 @@ sidebarTitle: "Quotations"
 description: "Quotations are formal commercial proposals in Bioactiva CRM. Accepting or rejecting a quotation automatically closes the linked lead."
 ---
 
-A quotation (`cotización`) is a formal commercial proposal sent to a client, linked to a specific lead. Quotations are the mechanism by which you close a deal in Bioactiva CRM — accepting a quotation automatically closes its linked lead as `CIERRE_CON_VENTA`, and rejecting one closes it as `CIERRE_SIN_VENTA`. Both transitions are **atomic**: the quotation and the lead update together in a single transaction or neither updates at all.
+A quotation (`cotización`) is a formal commercial proposal sent to a client, linked to a specific lead in a 1:1 relationship. Quotations are the mechanism by which you close a deal in Bioactiva CRM — accepting a quotation automatically closes its linked lead as `CIERRE_CON_VENTA`, and rejecting one closes it as `CIERRE_SIN_VENTA`. Both transitions are **atomic**: the quotation and the lead update together in a single transaction or neither updates at all. The synchronization is bidirectional: changing the lead status via `PATCH /leads/:id/status` also updates the linked quotation status accordingly.
 
 ## Quotation Lifecycle
 
@@ -27,8 +27,12 @@ ENVIADA   → ACEPTADA  (via PATCH /quotations/:id/accept)  → Lead: CIERRE_CON
 | `RECHAZADA` | The client rejected the proposal. Closes lead as `CIERRE_SIN_VENTA`. | `PENDIENTE` or `ENVIADA` |
 
 <Warning>
-  `ACEPTADA` and `RECHAZADA` are terminal states. You cannot modify a quotation or change its status once it reaches either of these states. Any attempt to do so returns `400 Bad Request`.
+  `ACEPTADA` and `RECHAZADA` are terminal states for the quotation lifecycle endpoints. You cannot modify a quotation or change its status via the quotation API once it reaches either of these states.
 </Warning>
+
+<Note>
+  When the change originates from the linked lead (via `PATCH /leads/:id/status`), the quotation status is updated automatically even if it has reached `ACEPTADA` or `RECHAZADA`. See the [lead status change](/api/leads/status#lead-quotation-synchronization) docs for details.
+</Note>
 
 ## Concurrency Protection
 

@@ -20,7 +20,11 @@ PENDIENTE
   └── /reject → RECHAZADA (lead → CIERRE_SIN_VENTA)
 ```
 
-`ACEPTADA` and `RECHAZADA` are **terminal states**. Once a quotation reaches either state, no further edits or status transitions are allowed.
+`ACEPTADA` and `RECHAZADA` are **terminal states** for the quotation lifecycle endpoints. Once a quotation reaches either state, no further edits or status transitions are allowed via the quotation API.
+
+<Note>
+  Synchronization is bidirectional. When the linked lead status changes via `PATCH /leads/:id/status`, the quotation status is updated automatically — see the [lead status change](/api/leads/status#lead-quotation-synchronization) docs for the complete state mapping.
+</Note>
 
 ---
 
