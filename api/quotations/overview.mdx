@@ -16,10 +16,6 @@ The Quotations API lets you create and manage commercial proposals (cotizaciones
   Date of the quotation in ISO 8601 format (e.g., `"2026-06-15T00:00:00.000Z"`).
 </ParamField>
 
-<ParamField body="dirigido" type="string" required>
-  Who the proposal is addressed to. Maximum 90 characters.
-</ParamField>
-
 <ParamField body="nombreServicio" type="string" required>
   Name of the service being quoted. Maximum 150 characters.
 </ParamField>
@@ -40,10 +36,6 @@ The Quotations API lets you create and manage commercial proposals (cotizaciones
   The user ID of the sender. Must refer to an existing user.
 </ParamField>
 
-<ParamField body="cliente" type="string">
-  Client name. Maximum 120 characters. Optional.
-</ParamField>
-
 <ParamField body="producto" type="string">
   Product name. Maximum 120 characters. Optional.
 </ParamField>
@@ -61,15 +53,14 @@ The Quotations API lets you create and manage commercial proposals (cotizaciones
 ```json
 {
   "fechaCot": "2026-06-15T00:00:00.000Z",
-  "dirigido": "Dr. Ramírez",
-  "cliente": "TechCorp S.A.C.",
   "nombreServicio": "Cloud Migration Package",
   "monto": "15000.00",
   "tipo": "USD",
-  "observacion": "Includes 6 months of post-migration support",
-  "linkPropuesta": "https://docs.empresa.com/prop-2026-01",
   "idLead": 1,
-  "idRemitente": 2
+  "idRemitente": 2,
+  "producto": "Cloud Migration Bundle",
+  "observacion": "Includes 6 months of post-migration support",
+  "linkPropuesta": "https://docs.empresa.com/prop-2026-01"
 }
 ```
 
@@ -91,7 +82,7 @@ The Quotations API lets you create and manage commercial proposals (cotizaciones
   "linkPropuesta": "https://docs.empresa.com/prop-2026-01",
   "idLead": 1,
   "leadServicioInteres": "Cloud migration consulting",
-  "leadEstado": "EN_PROSPECTO",
+  "leadEstado": "OFERTADO",
   "contactName": "María García",
   "idRemitente": 2,
   "remitenteName": "Ana Martínez",
@@ -101,14 +92,20 @@ The Quotations API lets you create and manage commercial proposals (cotizaciones
 }
 ```
 
+<Note>
+  `nombreRemitente` is captured as a name snapshot at creation time. If the user later changes their name, this field will not change. Use `remitenteName` (resolved by JOIN) to see the sender's current name.
+</Note>
+
+<Note>
+  **Lead promotion:** creating a quotation for a lead in `EN_PROSPECTO` status automatically promotes it to `OFERTADO`. A lead can only have **one** quotation — attempting to create a second one returns `409 Conflict`.
+</Note>
+
 **Errors**
 
 - `400 Bad Request` — `monto` is not a numeric string.
 - `404 Not Found` — The lead or remitente does not exist.
-
-<Note>
-  `nombreRemitente` is captured as a name snapshot at creation time. If the user later changes their name, this field will not change. Use `remitenteName` (resolved by JOIN) to see the sender's current name.
-</Note>
+- `409 Conflict` — The lead has pending activities (resolve them before creating the quotation).
+- `409 Conflict` — The lead already has a quotation.
 
 ---
 
@@ -230,8 +227,8 @@ Marks the quotation as logically deleted. The record is never physically removed
 | --- | --- | --- |
 | `id` | number | Quotation ID |
 | `fechaCot` | ISO 8601 | Quotation date |
-| `dirigido` | string | Addressee |
-| `cliente` | string or null | Client name |
+| `dirigido` | string or null | Addressee (derived from the lead's contact; null if the lead has no contact) |
+| `cliente` | string or null | Client name (derived from the lead's organization) |
 | `producto` | string or null | Product name |
 | `nombreRemitente` | string | Sender name snapshot (captured at creation) |
 | `nombreServicio` | string | Service name |

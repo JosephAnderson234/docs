@@ -17,7 +17,11 @@ Read and update the **in-app inbox** (the bell icon) of the authenticated user. 
 Return the in-app notifications for the currently authenticated user, most recent first.
 
 <Note>
-  **Automatic stalled-lead alert.** Every day at **09:00** the system generates an in-app notification for the owner of each open lead that has had **no status change in the last 30\+ days**. The alert is delivered to the user assigned as the lead's responsible.
+  **Automatic stalled-lead alert.** Every day at **09:00** (in the server's configured timezone, see `APP_TIMEZONE` below) the system generates an in-app notification for the owner of each open lead that has had **no status change in the last 30\+ days**. The alert is delivered to the user assigned as the lead's responsible.
+</Note>
+
+<Note>
+  **Server timezone.** The `APP_TIMEZONE` environment variable (default `"America/Lima"`) controls the timezone used to format human-readable dates inside the `mensaje` field of in-app notifications. It does **not** affect the ISO 8601 UTC timestamps returned in `createdAt` or any other date field.
 </Note>
 
 ### Query parameters

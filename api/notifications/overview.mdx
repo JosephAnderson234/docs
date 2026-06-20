@@ -22,8 +22,6 @@ El módulo de Notificaciones permite **programar, consultar y cancelar** correos
 
 **Plantilla opcional:** se puede seleccionar una plantilla activa para precargar asunto y cuerpo, pero no es obligatoria. El asunto y el cuerpo siempre se envían como **copia editable** (vengan de una plantilla o escritos a mano); la plantilla original nunca se modifica.
 
-**Horario laboral:** los envíos se programan en la franja **\[09:00–18:00)**. Si la hora indicada cae fuera, se reprograma a las 09:00 del mismo día.
-
 Las notificaciones **no se reprograman**: para cambiar fecha, hora o plantilla, cancela la existente y crea una nueva.
 
 **Authentication:** Bearer JWT required (`Authorization: Bearer <token>`). See [Authentication](/authentication) for how to obtain and pass the token.
@@ -123,7 +121,7 @@ Programa un **seguimiento** con una sola instancia: primero envía un correo **i
 
   | Campo | Tipo | Obligatorio | Notas |
   | --- | --- | --- | --- |
-  | `internal.fechaEnvio` | string (ISO 8601) | sí | Aplica horario laboral `[09:00–18:00)` |
+  | `internal.fechaEnvio` | string (ISO 8601) | sí | Instante UTC — se respeta tal cual |
   | `internal.idTemplate` | integer ≥ 1 \| null | **no** | Default `null`. Si se omite o es `null`, asunto y cuerpo van escritos a mano |
   | `internal.asunto` | string (1–255) | sí |  |
   | `internal.cuerpo` | string (HTML) | sí |  |
@@ -138,8 +136,7 @@ Programa un **seguimiento** con una sola instancia: primero envía un correo **i
 
   - `instancias` debe tener **exactamente 1 elemento**.
   - El correo **interno** (al responsable) debe ser **anterior** al **externo** (al cliente).
-  - **Todas** las fechas (interna y externa) deben ser futuras y caer **antes de la fecha de fin** de la actividad activa del lead.
-  - Las fechas fuera del horario laboral `[09:00–18:00)` se **reprograman a las 09:00** del mismo día.
+  - **Todas** las fechas (interna y externa) deben ser futuras, interpretadas como instantes UTC, y caer **antes de la fecha de fin** de la actividad activa del lead.
 </Note>
 
 ### Ejemplo request
@@ -252,8 +249,7 @@ Campos de `internal` y `external`:
   - Solo editable mientras el seguimiento esté en estado `PROGRAMADA`.
   - Ninguno de los dos correos de la instancia debe haber sido enviado.
   - `external.fechaEnvio` debe ser posterior a `internal.fechaEnvio`.
-  - Ambas fechas deben ser futuras y anteriores a la fecha de fin de la actividad activa.
-  - Si una fecha cae fuera de `[09:00–18:00)`, se reprograma a las `09:00` del mismo día.
+  - Ambas fechas deben ser futuras, interpretadas como instantes UTC, y anteriores a la fecha de fin de la actividad activa.
 </Note>
 
 ### Ejemplo request
@@ -322,7 +318,7 @@ Ver [tabla de errores](#errores) para el envelope completo.
 
 Lista las notificaciones en **Programadas** y **Vencidas**. Las canceladas **nunca** se devuelven.
 
-### Query parameters (todos opcionales)
+### Query parameters
 
 <ParamField query="estado" type="string">
   `PROGRAMADA` | `VENCIDA`. Solo estos dos valores; otro → `400`.
@@ -336,29 +332,45 @@ Lista las notificaciones en **Programadas** y **Vencidas**. Las canceladas **nun
   Filtra por encargado.
 </ParamField>
 
+<ParamField query="page" default="1" type="integer ≥ 1">
+  Número de página.
+</ParamField>
+
+<ParamField query="limit" default="10" type="integer ≥ 1">
+  Resultados por página.
+</ParamField>
+
 ### Respuesta — `200 OK`
 
-Array de `NotificationResponseDto`, ordenado por `fechaEnvioInterno` ascendente.
+Objeto paginado con los resultados en `data` y metadatos en `meta`. Los items se ordenan por `fechaEnvioInterno` ascendente.
 
 ```json
-[
-  {
-    "id": 101,
-    "tipo": "RECORDATORIO",
-    "estado": "PROGRAMADA",
-    "idActividad": 34,
-    "idLead": 12,
-    "idResponsable": 7,
-    "asuntoInterno": "Recordatorio: actividad pendiente",
-    "fechaEnvioInterno": "2026-06-20T14:00:00.000Z",
-    "enviadoInterno": false,
-    "correoCliente": null,
-    "asuntoExterno": null,
-    "fechaEnvioExterno": null,
-    "enviadoExterno": false,
-    "createdAt": "2026-06-14T20:05:00.000Z"
+{
+  "data": [
+    {
+      "id": 101,
+      "tipo": "RECORDATORIO",
+      "estado": "PROGRAMADA",
+      "idActividad": 34,
+      "idLead": 12,
+      "idResponsable": 7,
+      "asuntoInterno": "Recordatorio: actividad pendiente",
+      "fechaEnvioInterno": "2026-06-20T14:00:00.000Z",
+      "enviadoInterno": false,
+      "correoCliente": null,
+      "asuntoExterno": null,
+      "fechaEnvioExterno": null,
+      "enviadoExterno": false,
+      "createdAt": "2026-06-14T20:05:00.000Z"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "limit": 10,
+    "total": 1,
+    "totalPages": 1
   }
-]
+}
 ```
 
 ---

@@ -42,7 +42,7 @@ Quotations include built-in **concurrent modification protection** to prevent ra
 
 | Field | Type | Description |
 |---|---|---|
-| `dirigido` | string | Who the proposal is addressed to |
+| `dirigido` | string \| null | Who the proposal is addressed to (null if the lead has no contact) |
 | `nombreServicio` | string | Name of the service being quoted |
 | `monto` | string (numeric) | Amount as a decimal string (e.g., `"5000.00"`) |
 | `tipo` | enum | Currency: `PEN` (Peruvian Sol) or `USD` (US Dollar) |

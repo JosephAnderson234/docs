@@ -8,7 +8,7 @@ A lead is the core entity of the Bioactiva CRM. Each lead belongs to an organiza
 
 ## Lead Status Lifecycle
 
-Every lead starts at `EN_PROSPECTO` when you create it. From there, you advance it manually using `PATCH /leads/:id/status`, except when a quotation is accepted or rejected — in those cases the status changes automatically and atomically as part of the quotation transition.
+Every lead starts at `EN_PROSPECTO` when you create it. From there, you advance it manually using `PATCH /leads/:id/status`, or automatically via quotation actions — creating a quotation promotes `EN_PROSPECTO` to `OFERTADO`, and accepting or rejecting one closes the lead atomically as part of the quotation lifecycle transition.
 
 ```
 EN_PROSPECTO → OFERTADO → CIERRE_CON_VENTA

@@ -51,7 +51,7 @@ Every request that includes a body must set the content type to JSON:
 Content-Type: application/json
 ```
 
-**Dates** — all date and datetime values are expressed as [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) strings in UTC, for example `"2026-06-01T10:00:00.000Z"`. The API rejects non-conforming date strings with a `400 Bad Request`.
+**Dates** — all date and datetime values sent to and returned by the API are expressed as [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) strings in UTC, for example `"2026-06-01T10:00:00.000Z"`. The API rejects non-conforming date strings with a `400 Bad Request`. These are absolute instants — your client is responsible for converting them to the user's local timezone before displaying them.
 
 **Numeric strings** — some decimal fields (for example, quotation `monto`) are sent and returned as numeric strings (`"5000.00"`) to preserve precision. Check the field-level documentation for each resource.
 
