@@ -97,15 +97,42 @@ The Quotations API lets you create and manage commercial proposals (cotizaciones
 </Note>
 
 <Note>
-  **Lead promotion:** creating a quotation for a lead in `EN_PROSPECTO` status automatically promotes it to `OFERTADO`. A lead can only have **one** quotation — attempting to create a second one returns `409 Conflict`.
+  **Lead promotion and validation:** creating a quotation for a lead in `EN_PROSPECTO` status automatically promotes it to `OFERTADO`, provided the lead has no pending activities — otherwise the request is rejected with `409`. If the lead is already in `OFERTADO` or a later status, the quotation is created without changing the lead status. A lead can only have **one** quotation — attempting to create a second one returns `409 Conflict`.
 </Note>
 
 **Errors**
 
-- `400 Bad Request` — `monto` is not a numeric string.
-- `404 Not Found` — The lead or remitente does not exist.
-- `409 Conflict` — The lead has pending activities (resolve them before creating the quotation).
-- `409 Conflict` — The lead already has a quotation.
+| Status | `error` | `kind` | When |
+|---|---|---|---|
+| 400 | — | `validation` | `monto` is not a numeric string |
+| 404 | — | `not_found` | The lead or remitente does not exist |
+| 409 | `LeadHasPendingActivitiesException` | `Conflict` | The lead has pending activities — resolve them before creating the quotation |
+| 409 | `CotizacionConflictException` | `Conflict` | The lead already has a quotation |
+
+**`409 Conflict`** — lead has pending activities:
+
+```json
+{
+  "statusCode": 409,
+  "error": "LeadHasPendingActivitiesException",
+  "kind": "Conflict",
+  "message": "No se puede crear la cotización porque el lead 10 tiene actividades pendientes",
+  "path": "/quotations",
+  "timestamp": "2026-06-21T15:00:00.000Z"
+}
+```
+
+**`409 Conflict`** — lead already has a quotation:
+
+```json
+{
+  "statusCode": 409,
+  "error": "CotizacionConflictException",
+  "kind": "Conflict",
+  "message": "El lead 10 ya tiene una cotización",
+  "path": "/quotations",
+  "timestamp": "2026-06-21T15:00:00.000Z"
+}
 
 ---
 

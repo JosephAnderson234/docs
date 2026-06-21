@@ -64,9 +64,23 @@ Sets the quotation to `ACEPTADA` and simultaneously transitions the linked lead 
 | 400 | Quotation is not in `PENDIENTE` or `ENVIADA` |
 | 404 | Quotation or lead not found |
 | 409 | Two requests tried to finalize the same quotation at the same time — one succeeded and this one was rejected |
+| 409 | The linked lead has unresolved pending activities — resolve them before accepting. The quotation and lead are not changed. |
+
+**`409 Conflict`** — lead has pending activities:
+
+```json
+{
+  "statusCode": 409,
+  "error": "LeadHasPendingActivitiesException",
+  "kind": "Conflict",
+  "message": "No se puede aceptar la cotización porque el lead 10 tiene actividades pendientes",
+  "path": "/quotations/10/accept",
+  "timestamp": "2026-06-21T15:00:00.000Z"
+}
+```
 
 <Warning>
-  Accepting a quotation closes the linked lead atomically. If you receive a `409 Conflict`, it means two requests raced to change the quotation state simultaneously. Fetch the current quotation state with `GET /quotations/:id` and verify whether it was already accepted before deciding whether to retry.
+  Accepting a quotation closes the linked lead atomically. If you receive a `409 Conflict`, it means two requests raced to change the quotation state simultaneously, or the lead has unresolved pending activities. Fetch the current quotation state with `GET /quotations/:id` and verify whether it was already accepted before deciding whether to retry.
 </Warning>
 
 ---
@@ -88,12 +102,26 @@ Sets the quotation to `RECHAZADA` and simultaneously transitions the linked lead
 | 400 | Quotation is not in `PENDIENTE` or `ENVIADA` |
 | 404 | Quotation or lead not found |
 | 409 | Two requests tried to finalize the same quotation at the same time — one succeeded and this one was rejected |
+| 409 | The linked lead has unresolved pending activities — resolve them before rejecting. The quotation and lead are not changed. |
+
+**`409 Conflict`** — lead has pending activities:
+
+```json
+{
+  "statusCode": 409,
+  "error": "LeadHasPendingActivitiesException",
+  "kind": "Conflict",
+  "message": "No se puede rechazar la cotización porque el lead 10 tiene actividades pendientes",
+  "path": "/quotations/10/reject",
+  "timestamp": "2026-06-21T15:00:00.000Z"
+}
+```
 
 ---
 
 ## Handling 409 Conflict
 
-A `409 Conflict` response means two requests attempted to change the quotation state at the same time. If two requests try to finalize the same quotation simultaneously, one will succeed and the other will receive a `409 Conflict`. This protects against double-processing — for example, preventing a quotation from being both accepted and rejected at the same time.
+A `409 Conflict` response can mean one of two things: two requests attempted to change the quotation state simultaneously, or the linked lead has unresolved pending activities. If two requests try to finalize the same quotation simultaneously, one will succeed and the other will receive a `409 Conflict`. This protects against double-processing — for example, preventing a quotation from being both accepted and rejected at the same time.
 
 To recover:
 

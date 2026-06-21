@@ -10,7 +10,7 @@ Use the Organizations API to manage the companies and entities in your Bioactiva
 
 ## POST /organizations
 
-Create a new organization record.
+Create a new organization record. If the supplied RUC (`ruc`) already exists in the database — whether active or soft-deleted — the existing record is **reused**: its fields are overwritten with the payload data, and a soft-deleted entry is restored. No duplicate is created and no error is returned for an existing RUC. The request still fails if the `codigoCliente` belongs to a different organization.
 
 <Note>
   Authentication is not required for this endpoint at this time.
@@ -98,7 +98,7 @@ Create a new organization record.
 
 | Status | `error` | `kind` | When |
 | --- | --- | --- | --- |
-| `400 Bad Request` | — | `validation` | DTO validation failed, RUC is not exactly 11 digits, RUC is already registered to another organization, or RUC was not found in SUNAT. |
+| `400 Bad Request` | — | `validation` | DTO validation failed, RUC is not exactly 11 digits, or RUC was not found in SUNAT. |
 | `409 Conflict` | `DuplicateClientCodeException` | `conflict` | The supplied `codigoCliente` already belongs to **another** organization. Validated even if the organization has no RUC. |
 
 <Note>
@@ -188,7 +188,7 @@ GET /organizations?page=1&limit=10&term=bio&sector=TECNOLOGIA&tamano=MEDIANO&tip
 </Note>
 
 <Note>
-  **Soft-deleted organizations are excluded by default.** Organizations that have been deactivated via [`DELETE /organizations/:id`](#delete-organizations-id-desactivar-soft-delete) are filtered out of this listing. Uniqueness checks on `ruc` and `codigoCliente` continue to consider deactivated organizations to preserve the annual-monitoring `codigoCliente`.
+  **Soft-deleted organizations are excluded by default.** Organizations that have been deactivated via [`DELETE /organizations/:id`](#delete-organizations-id-desactivar-soft-delete) are filtered out of this listing. The `codigoCliente` uniqueness check continues to consider deactivated organizations to preserve the annual-monitoring workflow. The `ruc` uniqueness check no longer applies to `POST /organizations`: if a POST request carries a RUC that belongs to a deactivated organization, the existing record is **restored and updated** instead of returning an error.
 </Note>
 
 ---
@@ -384,5 +384,5 @@ Authorization: Bearer <token>
   - The organization row is **not** deleted; only its active flag changes. `codigoCliente` and `ruc` remain reserved so future uniqueness checks continue to detect them.
   - **All contacts** of the organization are transactionally updated to `estado_correo = VENCIDO`. The contacts themselves are **not** deleted; they simply become ineligible to be linked to leads (see [Contacts → soft-delete semantics](/api/contacts/overview#patch-contacts-id-estado-correo)).
   - After deactivation, the organization is **excluded by default** from [`GET /organizations`](#get-organizations) and [`GET /organizations/:id`](#get-organizations-id). Calling either endpoint for a deactivated organization responds `404 Not Found`.
-  - Internal uniqueness checks on `ruc` and `codigoCliente` (used by `POST /organizations` and `PATCH /organizations/:id`) **still see** deactivated organizations, so the same code cannot be re-registered while the deactivated record remains in the database.
+  - Internal uniqueness checks on `codigoCliente` (used by `POST /organizations` and `PATCH /organizations/:id`) **still see** deactivated organizations, so the same client code cannot be re-registered while the deactivated record remains. The `ruc` uniqueness check no longer applies to `POST /organizations`: sending a RUC that belongs to a deactivated organization triggers a **restore and update** instead of an error.
 </Note>

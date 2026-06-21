@@ -155,6 +155,14 @@ List leads with optional filters and pagination. Soft-deleted records are always
   Number of results per page. Minimum `1`.
 </ParamField>
 
+<ParamField query="misLeads" type="boolean">
+  If `true`, returns only leads assigned to the authenticated user. Optional.
+</ParamField>
+
+<ParamField query="conActividadesPendientes" type="boolean">
+  If `true`, returns only leads that have at least one pending activity. Optional. Note: if both `conActividadesPendientes` and `alertaActividad` are provided, `alertaActividad` takes precedence and `conActividadesPendientes` is ignored.
+</ParamField>
+
 ### Example request
 
 ```http
@@ -162,7 +170,7 @@ GET /leads?estado=EN_PROSPECTO&search=consulting&sector=Salud&alertaActividad=EN
 Authorization: Bearer <token>
 ```
 
-Additional activity-alert filter examples:
+Additional filter examples:
 
 ```http
 GET /leads?alertaActividad=POR_VENCER&estado=OFERTADO
@@ -171,6 +179,11 @@ Authorization: Bearer <token>
 
 ```http
 GET /leads?alertaActividad=SIN_ACTIVIDADES
+Authorization: Bearer <token>
+```
+
+```http
+GET /leads?misLeads=true&conActividadesPendientes=true&page=1&limit=10
 Authorization: Bearer <token>
 ```
 
@@ -220,7 +233,7 @@ Returns a single lead object with the same structure as one element of the `GET 
 
 ## PATCH /leads/:id
 
-Update one or more fields on an existing lead. All fields are optional — only the fields you include will be changed.
+Update one or more fields on an existing lead. All fields are optional — only the fields you include will be changed. This endpoint supports **partial updates**: omitted fields are preserved, and fields sent as `null` are explicitly set to null.
 
 **Authentication:** Bearer JWT required.
 
@@ -242,21 +255,16 @@ Update one or more fields on an existing lead. All fields are optional — only 
   Acquisition channel through which the lead was sourced (e.g., `LinkedIn`, `Referral`). Maximum 60 characters.
 </ParamField>
 
-<ParamField body="idEncargado" type="number">
-  ID of the user responsible for this lead. Must exist.
-</ParamField>
-
 <Note>
-  La organización y el contacto se definen al crear el lead y no pueden modificarse posteriormente.
+  La organización y el contacto se definen al crear el lead y no pueden modificarse posteriormente. El estado (`estado`) no se cambia por este endpoint — use `PATCH /leads/:id/status` para transiciones de pipeline. El responsable (`idEncargado`) ya no puede modificarse a través de este endpoint.
 </Note>
 
 ### Example request
 
 ```json
 {
-  "servicioInteres": "Cloud migration consulting",
-  "comentarios": "Updated priority — client aims to decide by end of month",
-  "canalCaptacion": "LinkedIn"
+  "comentarios": "Nuevo comentario",
+  "desafioOportunidad": "Optimizar procesos"
 }
 ```
 
@@ -264,7 +272,7 @@ Update one or more fields on an existing lead. All fields are optional — only 
 
 | Status | `error` | `kind` | When |
 | --- | --- | --- | --- |
-| `404` | — | `not_found` | Lead or responsible user not found. |
+| `404` | — | `not_found` | Lead not found. |
 
 ### Response — `200 OK`
 
