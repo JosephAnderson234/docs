@@ -26,7 +26,76 @@ Importa datos en bloque desde archivos `.xlsx`. El flujo es **insert-only** (no 
 
 ## GET /data/import/template
 
-Descarga la plantilla `.xlsx` con las hojas **Organizaciones**, **Contactos**, **Leads**, **Cotizaciones** y una hoja **"Valores válidos"** con los enums aceptados.
+Descarga la plantilla `.xlsx` con las hojas **Organizaciones**, **Contactos**, **Leads**, **Cotizaciones** y una hoja **"Valores válidos"** con los enums aceptados. La plantilla incluye validaciones integradas como selectores desplegables entre hojas y resaltado de columnas obligatorias.
+
+### Estructura de las hojas
+
+#### Organizaciones
+
+| Columna | Descripción |
+| --- | --- |
+| N° | Fila numerada automáticamente |
+| Nombre | Nombre legal de la organización (obligatorio) |
+| Nombre comercial | Nombre comercial (obligatorio) |
+| RUC | RUC de 11 dígitos. Se valida contra SUNAT si se provee |
+| Tipo | `EMPRESA_NACIONAL`, `EMPRESA_EXTRANJERA`, `INDEPENDIENTE` (obligatorio) |
+| Tamaño | `MICRO`, `PEQUENO`, `MEDIANO`, `GRANDE` (obligatorio) |
+| **Sector** | **Obligatorio** (resaltado en azul). El import rechaza filas sin sector con error bloqueante |
+| Sub área | Sub-área o departamento (opcional, texto libre) |
+| Ubicación | Ciudad o ubicación geográfica |
+| LinkedIn | URL del perfil de LinkedIn |
+| Actividad económica | Descripción de la actividad económica principal |
+
+**Nota:** La columna "Contacto vigente" ha sido eliminada.
+
+#### Contactos
+
+| Columna | Descripción |
+| --- | --- |
+| N° | Fila numerada automáticamente |
+| Vocativo | `SR`, `SRA`, `DR`, `DRA`, `ING`, `LIC`, `MG`, `MTRO` |
+| Nombre | Nombres del contacto (obligatorio) |
+| Apellidos | Apellidos del contacto (obligatorio) |
+| **Organización abreviado** | **Selector desplegable** alimentado desde la hoja Organizaciones del mismo archivo |
+| RUC | RUC de la organización asociada |
+| Correo electrónico 1 | Correo principal (obligatorio) |
+| Correo electrónico 2 | Correo secundario |
+| Teléfono | Número de teléfono |
+| Cargo | Cargo del contacto |
+| Comentarios | Notas adicionales |
+
+**Nota:** La hoja se ha simplificado a 11 columnas. Columnas decorativas y redundantes eliminadas.
+
+#### Leads
+
+| Columna | Descripción |
+| --- | --- |
+| N° | Fila numerada automáticamente |
+| **Organización** | **Selector desplegable** desde la hoja Organizaciones del mismo archivo |
+| **Correo electrónico** | **Selector desplegable** desde la columna "Correo electrónico 1" de la hoja Contactos del mismo archivo |
+| Servicio de interés | Servicio o producto de interés (obligatorio) |
+| **Encargado** | **Selector desplegable** con los usuarios ACTIVOS del CRM. Si no hay usuarios activos, queda como texto libre |
+| Comentarios | Notas adicionales |
+| Canal de captación | Canal por el que se captó el lead |
+| Próxima actividad | Nombre de una actividad pendiente a crear para este lead |
+
+**Columnas eliminadas:** Año, Tipo, Sector, Nombre del contacto, Alerta actividad.
+
+#### Cotizaciones
+
+| Columna | Descripción |
+| --- | --- |
+| N° | Fila numerada automáticamente |
+| **ID de lead** | **Obligatorio, selector desplegable** desde la columna "ID Lead" de la hoja Leads del mismo archivo |
+| Fecha | Fecha de la cotización |
+| Nombre del servicio | Nombre del servicio cotizado (obligatorio) |
+| Monto | Monto de la cotización |
+| Tipo | `PEN` o `USD` |
+| Producto | Nombre del producto |
+| Observación | Notas adicionales |
+| Link de propuesta | URL del documento de propuesta |
+
+**Columnas eliminadas:** Año, Mes, # Cotización.
 
 ### Example request
 
@@ -95,11 +164,27 @@ curl -X POST \
 | `warnings` | `Array<{sheet,row,message}>` | Advertencias no bloqueantes (p. ej. duplicados que se omitirán). |
 | `parsedCounts` | object | Cuántas filas se leíyeron por hoja. |
 
+<Note>
+  **Validaciones de regla de negocio.** El import rechaza con error bloqueante las siguientes combinaciones inválidas de lead y cotización:
+
+  - **Lead EN_PROSPECTO:** no puede tener ninguna cotización vinculada.
+  - **Lead OFERTADO:** máximo 1 cotización. Si la tiene, debe estar en `PENDIENTE` o `ENVIADA`. Si no tiene ninguna, el sistema crea automáticamente una cotización provisional (estado `PENDIENTE`, monto 0, dirigido "Por definir").
+  - **Lead CIERRE_CON_VENTA:** debe tener exactamente 1 cotización en estado `ACEPTADA`.
+  - **Lead CIERRE_SIN_VENTA:** debe tener exactamente 1 cotización en estado `RECHAZADA`.
+</Note>
+
 ---
 
 ## POST /data/import/commit
 
 Encola el procesamiento de la importación. Devuelve el `jobId` que se debe consultar con `GET /data/import/jobs/:id`.
+
+<Note>
+  **Notificación in-app al fallar.** Si el archivo tiene errores de validación o ocurre un error en runtime, el usuario que lanzó el import recibe una notificación in-app (campana) con:
+  - **Título:** "Error de importación"
+  - **Mensaje:** "Se detectaron N errores en 'archivo.xlsx'. Los datos no fueron importados." seguido del detalle de hasta 10 errores en formato `• [Hoja · fila N] mensaje`.
+  - En caso de error en runtime, Prisma hace rollback completo (ningún registro queda a medias en la BD) y el job BullMQ queda en estado `"failed"`, consultable en `GET /data/import/jobs/:id`.
+</Note>
 
 ### Request
 

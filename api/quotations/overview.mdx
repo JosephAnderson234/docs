@@ -166,6 +166,10 @@ Use query parameters to filter the results. All parameters are optional. Results
   Return only quotations whose `fechaCot` is on or before this ISO 8601 date. Must be greater than or equal to `fechaDesde`.
 </ParamField>
 
+<Note>
+  Las fechas sin hora se interpretan como inicio del día en la zona horaria `America/Lima` (UTC-5).
+</Note>
+
 <ParamField query="tipo" type="string">
   Filter by currency. Accepted values: `PEN`, `USD` (the same enum already used in `tipo` on `POST /quotations` and `PATCH /quotations/:id`). Any other value is silently ignored and the filter is treated as not set.
 </ParamField>

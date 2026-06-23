@@ -147,6 +147,10 @@ List leads with optional filters and pagination. Soft-deleted records are always
   Upper bound for filtering by lead creation date (`createdAt`). Inclusive. Must be greater than or equal to `fechaDesde`; otherwise the API responds `400 Bad Request`.
 </ParamField>
 
+<Note>
+  Las fechas sin hora se interpretan como inicio del día en la zona horaria `America/Lima` (UTC-5).
+</Note>
+
 <ParamField query="page" default="1" type="number">
   Page number. Minimum `1`.
 </ParamField>

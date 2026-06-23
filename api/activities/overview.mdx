@@ -37,7 +37,7 @@ Create a new activity. The initial status is always `PENDIENTE`.
 </ParamField>
 
 <ParamField body="fechaFin" type="string (ISO 8601)" required>
-  End date and time of the activity. Must be strictly after `fechaInicio`.
+  End date and time of the activity. Must be strictly after `fechaInicio`. **No puede ser anterior al momento actual en la zona horaria `America/Lima`**.
 </ParamField>
 
 <ParamField body="tipo" type="enum" required>
@@ -95,7 +95,7 @@ Returns the full activity object. See the [response field reference](#response-f
 
 | Status | When |
 | --- | --- |
-| `400` | `fechaInicio` is not before `fechaFin`, **`fechaInicio` is a date before today** (`"La fecha de la actividad no puede ser anterior a la fecha actual"`), or the request body fails validation |
+| `400` | `fechaInicio` is not before `fechaFin`, **`fechaInicio` is a date before today** (`"La fecha de la actividad no puede ser anterior a la fecha actual"`), **`fechaFin` es anterior al momento actual en America/Lima**, or the request body fails validation |
 | `404` | Lead not found |
 | `409` | The lead already has an activity in `PENDIENTE` state |
 
@@ -200,6 +200,10 @@ List activities with optional filters and pagination. Soft-deleted records are a
   Return only activities whose `fechaInicio` is **on or before** this value.
 </ParamField>
 
+<Note>
+  Las fechas sin hora se interpretan como inicio del día en la zona horaria `America/Lima` (UTC-5).
+</Note>
+
 <ParamField query="page" default="1" type="number">
   Page number. Minimum `1`.
 </ParamField>
@@ -250,6 +254,10 @@ Update one or more fields on an existing activity. All fields are optional — o
 `nombreActividad`, `fechaInicio`, `fechaFin`, `notas`
 
 <Note>
+  Si se actualiza `fechaFin`, este no puede ser anterior al momento actual en la zona horaria `America/Lima`.
+</Note>
+
+<Note>
   **`idResponsable` is deprecated.** El responsable se hereda siempre del encargado del lead. Si se envía `idResponsable`, el servidor lo **ignora** silenciosamente.
 </Note>
 
@@ -270,7 +278,7 @@ Returns the updated activity object.
 
 | Status | When |
 | --- | --- |
-| `400` | The resulting date combination is invalid (`fechaInicio` ≥ `fechaFin`), or validation fails |
+| `400` | The resulting date combination is invalid (`fechaInicio` ≥ `fechaFin`), **`fechaFin` es anterior al momento actual en America/Lima**, or validation fails |
 | `404` | Activity not found |
 
 <Note>
@@ -321,6 +329,10 @@ Devuelve el objeto completo de la actividad (`ActivityResponseDto`), con el mism
 ## DELETE /activities/:id
 
 Soft-delete an activity. The record is logically deleted — it is excluded from all subsequent queries but not physically removed from the database.
+
+<Note>
+  Al eliminar la actividad, los recordatorios y seguimientos programados asociados se cancelan automáticamente.
+</Note>
 
 **Authentication:** Bearer JWT required.
 

@@ -42,7 +42,7 @@ Create a new organization record. If the supplied RUC (`ruc`) already exists in 
   Peru tax ID (RUC). Must be exactly 11 characters. When provided, the API validates this value against the SUNAT registry before creating the record.
 </ParamField>
 
-<ParamField body="sector" type="enum">
+<ParamField body="sector" type="enum" required>
   Industry sector. Must be a valid `Sector` enum value (e.g. `TECNOLOGIA`, `OTROS`).
 </ParamField>
 
@@ -98,7 +98,7 @@ Create a new organization record. If the supplied RUC (`ruc`) already exists in 
 
 | Status | `error` | `kind` | When |
 | --- | --- | --- | --- |
-| `400 Bad Request` | — | `validation` | DTO validation failed, RUC is not exactly 11 digits, or RUC was not found in SUNAT. |
+| `400 Bad Request` | — | `validation` | DTO validation failed (e.g. sector ausente), RUC is not exactly 11 digits, or RUC was not found in SUNAT. |
 | `409 Conflict` | `DuplicateClientCodeException` | `conflict` | The supplied `codigoCliente` already belongs to **another** organization. Validated even if the organization has no RUC. |
 
 <Note>
@@ -289,7 +289,7 @@ Partially update an existing organization. Send only the fields you want to chan
 
 ### Request body
 
-All fields are optional and follow the same rules as [`POST /organizations`](#post-organizations).
+All fields are optional. Each field follows the same validation rules as [`POST /organizations`](#post-organizations), except `sector` which is optional in updates but cannot be `null` if provided.
 
 ```json
 {
